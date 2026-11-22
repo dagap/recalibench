@@ -179,3 +179,14 @@ def test_missing_named_answer_is_a_parse_error() -> None:
     raw = {"model": "jev-1.13.0", "answers": {"a": {"noul": 0.5}}, "usage": {"input_tokens": 1}}
     with pytest.raises(ParseError, match="KeyError"):
         _jev().parse_response(raw, {"a": BINARY, "b": BINARY})
+
+
+def test_count_tokens_covers_live_per_request_overhead() -> None:
+    # Live smoke 2026-11-22: a 178-char state + 85-char question billed 320 input tokens
+    # (osha_amputation mean); a 1196-char request billed 574 (osha_event_type mean).
+    jev = _jev()
+    short = jev.build_request(Item(id="s", state={"text": "x" * 166}, label=1), {"q": BINARY})
+    assert jev.count_tokens(short) >= 320
+    long_q = Question(kind="binary", text="y" * 900)
+    long = jev.build_request(Item(id="l", state={"text": "x" * 215}, label=1), {"q": long_q})
+    assert jev.count_tokens(long) >= 574

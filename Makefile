@@ -3,7 +3,7 @@ MODE   ?= mock
 TASKS  ?=                      # optional override, e.g. TASKS=osha_amputation
 MODELS ?=                      # optional override, e.g. MODELS=jev,tfidf_logreg
 LIMIT  ?= 20                   # items per task for make smoke
-RUN     = uv run recal
+RUN     = uv run $(if $(wildcard .env),--env-file .env) recal
 ARGS    = experiment=$(EXP) mode=$(MODE) \
           $(if $(TASKS),experiment.tasks=[$(TASKS)]) \
           $(if $(MODELS),experiment.models=[$(MODELS)])

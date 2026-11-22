@@ -15,8 +15,12 @@ Choice criteria are keyed by option *label* (what the model reads) and mapped
 back to option keys. `confidence` is ignored: the docs' own example disagrees
 with its probabilities. Only input tokens are billed. 429 and 529 are retried by
 ApiModel; other 4xx are fatal. Several questions may share one request (ApiModel's
-batch_questions / batch_repeats); the docs don't say whether the state is then
-billed once or once per question.
+batch_questions / batch_repeats; docs: cookbooks/parallel_questions). Measured live
+2026-11-22: each request bills ~270 tokens of overhead plus the state once, so
+batching 3 questions bills 2.5x fewer tokens (binary) or 1.5x (choice, whose option
+text is billed per question). Batched answers match separate ones (mean diff 0.004),
+and batched repeats vary as much as separate ones. Probabilities come back rounded
+to 2 decimals.
 """
 
 import json
@@ -28,6 +32,10 @@ from recalibench.core.types import Item, Question
 from recalibench.models.base_api import ApiModel, FatalApiError, ParseError, Usage
 
 CHARS_PER_TOKEN = 3  # conservative: TypeSafe's tokenizer is not documented
+# Billed per request on top of state + questions. Live smoke run, 2026-11-22, 61 calls
+# over 3 tasks: input_tokens ~= 270 + chars / 3.9 (max error 8%). 300 + chars / 3
+# never undercounted there.
+REQUEST_OVERHEAD_TOKENS = 300
 
 
 class JevModel(ApiModel):
@@ -102,7 +110,7 @@ class JevModel(ApiModel):
         chars = len(json.dumps(request["state"], ensure_ascii=False)) + len(
             json.dumps(request["questions"], ensure_ascii=False)
         )
-        return chars // CHARS_PER_TOKEN + 1
+        return REQUEST_OVERHEAD_TOKENS + chars // CHARS_PER_TOKEN + 1
 
     def _fake_answer(self, question: Question, probs: dict[str, float]) -> dict[str, Any]:
         if question.kind == "binary":

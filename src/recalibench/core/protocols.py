@@ -21,6 +21,9 @@ IntArray = npt.NDArray[np.int64]
 
 @runtime_checkable
 class Dataset(Protocol):
+    """`load()` returns the `schema()` columns with those dtypes, including a unique,
+    non-null string `id` column that stays stable across downloads."""
+
     name: str
 
     def download(self, raw_dir: Path) -> None: ...

@@ -4,13 +4,18 @@ Commands take Hydra overrides (e.g. `experiment=demo mode=mock`) as positional
 arguments. Commands whose phase is not built yet exit 1.
 """
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from recalibench.core.config import load_config
+from recalibench.core.paths import Paths
 from recalibench.core.registry import GROUPS, Group, PluginError, Registry
+from recalibench.datasets.manifest import DownloadError
+from recalibench.pipeline import download as download_stage
 
 app = typer.Typer(
     name="recal",
@@ -37,6 +42,7 @@ def main(
         ),
     ] = None,
 ) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s", force=True)
     ctx.obj = State(config_dirs=config_dir or [])
 
 
@@ -90,9 +96,31 @@ def list_plugins(ctx: typer.Context, overrides: Overrides = None) -> None:
 
 
 @app.command()
-def download(overrides: Overrides = None) -> None:
-    """Download raw data for the experiment's datasets."""
-    _not_implemented("download", 2)
+def download(
+    ctx: typer.Context,
+    overrides: Overrides = None,
+    dataset: Annotated[
+        list[str] | None,
+        typer.Option("--dataset", help="Dataset to fetch (repeatable). Default: the experiment's."),
+    ] = None,
+) -> None:
+    """Download raw data for the experiment's datasets (or --dataset ones)."""
+    state: State = ctx.obj
+    cfg = load_config(overrides or [], extra_conf_dirs=state.config_dirs)
+    reg = Registry(extra_conf_dirs=state.config_dirs, overrides=overrides or [])
+    try:
+        names = download_stage.datasets_for(reg, cfg, dataset or [])
+    except PluginError as e:
+        typer.echo(f"{e}\nTask configs arrive in Phase 3; until then use --dataset NAME.", err=True)
+        raise typer.Exit(code=1) from e
+    try:
+        download_stage.download(reg, Paths.from_config(cfg), names)
+    except DownloadError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=2) from e
+    except (PluginError, download_stage.SchemaError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()

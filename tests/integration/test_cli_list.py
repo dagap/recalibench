@@ -16,10 +16,12 @@ def test_list_shows_toys_from_extra_config_dir() -> None:
     assert "toy_identity" in out and "supports=['binary', 'multiclass']" in out
 
 
-def test_list_without_extra_dir_is_empty_but_ok() -> None:
+def test_list_builtins_without_extra_dir() -> None:
     result = CliRunner().invoke(app, ["list"])
     assert result.exit_code == 0, result.output
-    assert result.output.count("(none)") == 4
+    assert "recalibench.datasets.osha.OshaSIR" in result.output
+    assert "recalibench.datasets.workers_comp.WorkersComp" in result.output
+    assert "toy" not in result.output
 
 
 def test_list_fails_on_broken_plugin(tmp_path: Path) -> None:

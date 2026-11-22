@@ -10,17 +10,17 @@ from tests.conftest import TOY_CONF
 from tests.plugins.toy_dataset import ToyDataset
 
 
-def test_builtin_groups_start_empty() -> None:
+def test_builtin_datasets_registered_and_toys_absent() -> None:
     reg = Registry()
-    for group in ("dataset", "task", "model", "calibrator"):
-        assert reg.names(group) == []
+    assert {"osha_sir", "workers_comp"} <= set(reg.names("dataset"))
+    assert "toy" not in reg.names("dataset")
 
 
-def test_extra_config_dir_adds_toys(toy_registry: Registry) -> None:
-    assert toy_registry.names("dataset") == ["toy"]
-    assert toy_registry.names("task") == ["toy_binary"]
-    assert toy_registry.names("model") == ["toy"]
-    assert toy_registry.names("calibrator") == ["toy_identity"]
+def test_extra_config_dir_adds_toys_to_builtins(toy_registry: Registry) -> None:
+    assert {"toy", "osha_sir", "workers_comp"} <= set(toy_registry.names("dataset"))
+    assert "toy_binary" in toy_registry.names("task")
+    assert "toy" in toy_registry.names("model")
+    assert "toy_identity" in toy_registry.names("calibrator")
 
 
 def test_instantiates_with_injected_name_and_config(toy_registry: Registry) -> None:

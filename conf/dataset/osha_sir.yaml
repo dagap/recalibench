@@ -1,0 +1,7 @@
+_target_: recalibench.datasets.osha.OshaSIR
+# Full SIR data set, 1/1/2015 to 11/30/2025, from https://www.osha.gov/severe-injury-reports
+# Pinned: OSHA publishes refreshed data under a new file name. Update both lines together.
+url: https://www.osha.gov/sites/default/files/January2015toNovember2025.zip
+sha256: a3f7f434e200fb956131f12277378e592993a25db3f328716fbece106f846bb0
+user_agent: "Mozilla/5.0 (compatible; research-client/0.1)"   # osha.gov returns 403 to default client UAs
+timeout_s: 120

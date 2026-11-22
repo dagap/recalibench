@@ -1,8 +1,10 @@
 [project]
 name = "recalibench"
 version = "0.1.0"
-description = "Measure and fix the calibration of probabilistic decision models (LLM APIs included) with post-hoc calibration on a small labelled sample"
+description = "Measure and fix the confidence of probabilistic decision models with post-hoc calibration on a small labelled sample; benchmarked live on TypeSafe's Jev"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Pankaj Daga" }
 ]

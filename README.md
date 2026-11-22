@@ -1,6 +1,6 @@
 # recalibench
 
-**Measure and fix the confidence of probabilistic decision models, LLM APIs included, using a small labelled sample from your own domain and no retraining.**
+**Measure and fix the confidence of probabilistic decision models, LLM APIs included, using a small labelled sample from your own domain and no retraining. Benchmarked live on TypeSafe's Jev.**
 
 Teams act on a model's stated confidence: *auto-approve when it's at least 95% sure, send the rest to a person.* That rule is only safe if "95% sure" means right 95% of the time. recalibench measures how far a model's confidence is from reality on your task, fits a post-hoc calibrator on a few thousand labelled cases, and shows what that buys in automation and errors, with confidence intervals.
 
@@ -135,3 +135,7 @@ reports/         committed live report
 ## About
 
 Designed and built by **Pankaj Daga**, using AI pair-programming (Claude Code) for implementation. The problem framing, experiment design, engineering decisions and review are mine.
+
+## License
+
+[MIT](LICENSE)

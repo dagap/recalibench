@@ -407,3 +407,20 @@ def test_batching_works_in_mock_mode(tmp_path: Path) -> None:
     assert route.call_count == 0
     assert [len(p) for p in per_q] == [5, 5, 5]
     assert all(p.std is not None and p.std["yes"] > 0 for preds in per_q for p in preds)
+
+
+@respx.mock
+def test_latency_excludes_time_queued_for_a_concurrency_slot(tmp_path: Path) -> None:
+    # Live run 2026-11-22 reported ~31 s per item: the timer started before the request
+    # waited for one of `concurrency` slots. Latency must be the call itself.
+    async def slow(request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(0.05)
+        return _ok()
+
+    respx.post(URL).mock(side_effect=slow)
+    model = _jev(concurrency=1, repeats=1)
+    _bind(model, tmp_path)
+    preds = _run(model, _items(8))  # 8 calls in single file: ~0.4 s of queueing for the last
+    assert len(preds) == 8
+    latencies = [p.latency_ms for p in preds]
+    assert all(x is not None and x < 200 for x in latencies), latencies

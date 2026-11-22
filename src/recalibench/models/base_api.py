@@ -397,9 +397,7 @@ class ApiModel:
             ctx.budget.reserve(estimate)
             settled = False
             try:
-                start = time.perf_counter()
-                raw = await self._post(client, sem, request)
-                latency_ms = (time.perf_counter() - start) * 1000
+                raw, latency_ms = await self._post(client, sem, request)
                 try:
                     parsed, usage = self._parse(raw, qmap)
                 except ItemFailed:
@@ -448,7 +446,9 @@ class ApiModel:
 
     async def _post(
         self, client: httpx.AsyncClient, sem: asyncio.Semaphore, request: dict[str, Any]
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], float]:
+        """The reply and the latency of the successful call, in ms. Timed inside the
+        concurrency slot, so time spent queueing for a slot (or backing off) is excluded."""
         retrying = AsyncRetrying(
             stop=stop_after_attempt(self.max_attempts),
             wait=self._wait,
@@ -460,6 +460,7 @@ class ApiModel:
             async for attempt in retrying:
                 with attempt:
                     async with sem:
+                        start = time.perf_counter()
                         try:
                             response = await client.post(
                                 self.endpoint, json=request, headers=self.headers()
@@ -468,7 +469,8 @@ class ApiModel:
                             raise RetryableError(f"timeout after {self.timeout_s}s") from e
                         except httpx.TransportError as e:
                             raise RetryableError(f"{type(e).__name__}: {e}") from e
-                    return self._classify(response)
+                        latency_ms = (time.perf_counter() - start) * 1000
+                    return self._classify(response), latency_ms
         except RetryableError as e:
             raise ItemFailed(f"gave up after {self.max_attempts} attempts: {e}") from e
         raise AssertionError("unreachable")  # pragma: no cover

@@ -51,6 +51,7 @@ def test_metrics_json_contents(setup: tuple[Registry, Paths, Any]) -> None:
             )
         assert "smooth_ece" in m["raw"] and m["selected"] in m["candidates"]
         assert m["reliability"]["raw"]["top_label"]
+        assert m["reliability"]["bins"] == cfg.ece_bins  # the report needs bin edges
         assert {"tuned", "trust", "aurc", "curve"} <= set(m["selective"]["calibrated"])
     assert "auroc" in binary["raw"] and "auroc" not in choice["raw"]
     assert "p_yes" in binary["reliability"]["raw"]

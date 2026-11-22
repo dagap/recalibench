@@ -33,7 +33,7 @@ from recalibench.pipeline.scores_io import Scores, read_meta, read_scores
 
 log = logging.getLogger(__name__)
 
-EVALUATE_VERSION = 1
+EVALUATE_VERSION = 2  # 2: reliability.bins
 METRICS = "metrics.json"
 TARGET_ACCURACY = 0.95
 
@@ -165,6 +165,7 @@ def evaluate_pair(directory: Path, cfg: DictConfig, force: bool = False) -> Eval
         "difference": {k: v["difference"].as_dict() for k, v in boot.items()},
         "candidates": candidates,
         "reliability": {
+            "bins": bins,  # equal-width bins over [0, 1]; only non-empty bins are listed
             "raw": reliability_bins(raw[test], y_test, kind, bins),
             "calibrated": reliability_bins(cal[winner][test], y_test, kind, bins),
         },

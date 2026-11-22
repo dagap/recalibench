@@ -15,9 +15,9 @@ def _ci(value: float, low: float | None = None, high: float | None = None) -> di
     }
 
 
-def _bins(n: int, shift: float) -> list[dict[str, float]]:
+def _bins(n: int, shift: float, start: int = 0) -> list[dict[str, float]]:
     out: list[dict[str, float]] = []
-    for b in range(n):
+    for b in range(start, n):
         conf = (b + 0.5) / n
         out.append(
             {"bin": b, "confidence": conf, "observed": min(1.0, conf + shift), "count": 10 + b}
@@ -56,8 +56,8 @@ def metrics_dict(
     raw["smooth_ece"] = {"value": raw_ece * 1.1}
     cal["smooth_ece"] = {"value": cal_ece * 1.1}
     diff = {n: _ci(cal[n]["value"] - raw[n]["value"], -0.1, 0.1) for n in names}
-    rel_raw: dict[str, Any] = {"top_label": _bins(8, -0.1)}
-    rel_cal: dict[str, Any] = {"top_label": _bins(8, 0.0)}
+    rel_raw: dict[str, Any] = {"top_label": _bins(15, -0.1, start=7)}
+    rel_cal: dict[str, Any] = {"top_label": _bins(15, 0.0, start=7)}
     if kind == "binary":
         rel_raw["p_yes"] = _bins(15, -0.1)
         rel_cal["p_yes"] = _bins(15, 0.0)
@@ -78,7 +78,7 @@ def metrics_dict(
         "calibrated": cal,
         "difference": diff,
         "candidates": {"platt": {n: cal[n]["value"] for n in cal}},
-        "reliability": {"raw": rel_raw, "calibrated": rel_cal},
+        "reliability": {"bins": 15, "raw": rel_raw, "calibrated": rel_cal},
         "selective": {"raw": _selective(0.06, 0.5), "calibrated": _selective(0.04, 0.7)},
         "cost_usd": cost_usd,
         "mean_latency_ms": mean_latency_ms,

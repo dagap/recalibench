@@ -1,0 +1,7 @@
+.env
+data/
+cache/
+artifacts/
+mlruns/
+.venv/
+__pycache__/

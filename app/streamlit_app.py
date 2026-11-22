@@ -45,6 +45,17 @@ def _rows(root: str, mode: Mode, task: str, model_id: str, stamp: float) -> pd.D
     return data.test_rows(paths, pair)
 
 
+def _rows_or_note(
+    root: str, mode: Mode, task: str, model_id: str, stamp: float
+) -> pd.DataFrame | None:
+    """Per-case rows, or None after showing why they're unavailable (e.g. a clean clone)."""
+    try:
+        return _rows(root, mode, task, model_id, stamp)
+    except data.AppDataError as err:
+        st.info(str(err))
+        return None
+
+
 def _fmt_ci(metric: dict[str, Any] | None) -> str:
     c = ci(metric)
     if c is None:
@@ -185,119 +196,126 @@ with reliability:
 
 with decision:
     st.header("Decision policy: auto-handle confident cases, send the rest to people")
-    rows_df = _rows(str(ROOT), mode, task, model_id, stamp)
-    threshold: float = st.slider(
-        "Auto-handle when the model's confidence is at least",
-        min_value=0.5,
-        max_value=1.0,
-        value=0.95,
-        step=0.01,
-        key="threshold",
-    )
-    left, right = st.columns(2)
-    for col, side, label in (
-        (left, "raw", "Raw model"),
-        (right, "cal", f"Calibrated ({pair.selected})"),
-    ):
-        conf = rows_df[f"{side}_conf"].to_numpy(dtype=np.float64)
-        correct = rows_df[f"{side}_correct"].to_numpy(dtype=bool)
-        pt = data.policy(conf, correct, threshold)
-        with col:
-            st.subheader(label)
-            st.metric(f"Auto-handled ({label})", _pct(pt.auto_share))
-            st.metric(f"Error rate among auto-handled ({label})", _pct(pt.auto_error_rate))
-            st.metric(f"Sent to human review ({label})", f"{pt.review_count} of {pt.n}")
-    grid = [round(t, 2) for t in np.arange(0.5, 1.0001, 0.01)]
-    curve: list[dict[str, Any]] = []
-    for side, label in (("raw", "raw"), ("cal", "calibrated")):
-        conf = rows_df[f"{side}_conf"].to_numpy(dtype=np.float64)
-        correct = rows_df[f"{side}_correct"].to_numpy(dtype=bool)
-        for p in data.policy_curve(conf, correct, grid):
-            curve.append(
-                {
-                    "side": label,
-                    "threshold": p.threshold,
-                    "auto-handled": p.auto_share,
-                    "error rate": p.auto_error_rate,
-                }
-            )
-    curve_df = pd.DataFrame(curve).melt(
-        id_vars=["side", "threshold"], var_name="measure", value_name="share"
-    )
-    rule = (
-        alt.Chart(pd.DataFrame({"threshold": [threshold]}))
-        .mark_rule(color="#666")
-        .encode(x="threshold:Q")
-    )
-    chart = (
-        alt.Chart(curve_df)
-        .mark_line()
-        .encode(
-            x=alt.X("threshold:Q", title="confidence threshold"),
-            y=alt.Y("share:Q", axis=alt.Axis(format="%"), title=None),
-            color=alt.Color("side:N", scale=COLORS, title=None),
-            strokeDash=alt.StrokeDash("measure:N", title=None),
+    rows_df = _rows_or_note(str(ROOT), mode, task, model_id, stamp)
+    if rows_df is not None:
+        threshold: float = st.slider(
+            "Auto-handle when the model's confidence is at least",
+            min_value=0.5,
+            max_value=1.0,
+            value=0.95,
+            step=0.01,
+            key="threshold",
         )
-    )
-    st.altair_chart((chart + rule).properties(height=320), width="stretch")
-    st.caption(
-        "If the raw model's confidence is dishonest, a threshold like 0.95 either auto-handles "
-        "too little (under-confident) or makes more mistakes than it promises (over-confident). "
-        "After calibration, the threshold means what it says."
-    )
+        left, right = st.columns(2)
+        for col, side, label in (
+            (left, "raw", "Raw model"),
+            (right, "cal", f"Calibrated ({pair.selected})"),
+        ):
+            conf = rows_df[f"{side}_conf"].to_numpy(dtype=np.float64)
+            correct = rows_df[f"{side}_correct"].to_numpy(dtype=bool)
+            pt = data.policy(conf, correct, threshold)
+            with col:
+                st.subheader(label)
+                st.metric(f"Auto-handled ({label})", _pct(pt.auto_share))
+                st.metric(f"Error rate among auto-handled ({label})", _pct(pt.auto_error_rate))
+                st.metric(f"Sent to human review ({label})", f"{pt.review_count} of {pt.n}")
+        grid = [round(t, 2) for t in np.arange(0.5, 1.0001, 0.01)]
+        curve: list[dict[str, Any]] = []
+        for side, label in (("raw", "raw"), ("cal", "calibrated")):
+            conf = rows_df[f"{side}_conf"].to_numpy(dtype=np.float64)
+            correct = rows_df[f"{side}_correct"].to_numpy(dtype=bool)
+            for p in data.policy_curve(conf, correct, grid):
+                curve.append(
+                    {
+                        "side": label,
+                        "threshold": p.threshold,
+                        "auto-handled": p.auto_share,
+                        "error rate": p.auto_error_rate,
+                    }
+                )
+        curve_df = pd.DataFrame(curve).melt(
+            id_vars=["side", "threshold"], var_name="measure", value_name="share"
+        )
+        rule = (
+            alt.Chart(pd.DataFrame({"threshold": [threshold]}))
+            .mark_rule(color="#666")
+            .encode(x="threshold:Q")
+        )
+        chart = (
+            alt.Chart(curve_df)
+            .mark_line()
+            .encode(
+                x=alt.X("threshold:Q", title="confidence threshold"),
+                y=alt.Y("share:Q", axis=alt.Axis(format="%"), title=None),
+                color=alt.Color("side:N", scale=COLORS, title=None),
+                strokeDash=alt.StrokeDash("measure:N", title=None),
+            )
+        )
+        st.altair_chart((chart + rule).properties(height=320), width="stretch")
+        st.caption(
+            "If the raw model's confidence is dishonest, a threshold like 0.95 either "
+            "auto-handles too little (under-confident) or makes more mistakes than it promises "
+            "(over-confident). After calibration, the threshold means what it says."
+        )
 
 # ---- Examples ----------------------------------------------------------------------------
 
 with examples:
     st.header(f"Test cases: {task}")
-    rows_df = _rows(str(ROOT), mode, task, model_id, stamp)
-    c1, c2 = st.columns(2)
-    only_wrong = c1.checkbox("Only cases the calibrated model gets wrong", key="only_wrong")
-    only_changed = c2.checkbox(
-        "Only cases where calibration changed the decision", key="only_changed"
-    )
-    view = rows_df
-    if only_wrong:
-        view = view[~view["cal_correct"]]
-    if only_changed:
-        view = view[view["raw_choice"] != view["cal_choice"]]
-    shown = pd.DataFrame(
-        {
-            "id": view["id"],
-            "true label": view["label"],
-            "raw": [
-                f"{c} ({p:.0%})" for c, p in zip(view["raw_choice"], view["raw_conf"], strict=True)
-            ],
-            "calibrated": [
-                f"{c} ({p:.0%})" for c, p in zip(view["cal_choice"], view["cal_conf"], strict=True)
-            ],
-            "case": view["text"].str.slice(0, 160),
-        }
-    )
-    st.caption(f"{len(shown)} of {len(rows_df)} test cases · {model_id}")
-    st.dataframe(shown, hide_index=True)  # pyright: ignore[reportUnknownMemberType]
+    rows_df = _rows_or_note(str(ROOT), mode, task, model_id, stamp)
+    if rows_df is not None:
+        c1, c2 = st.columns(2)
+        only_wrong = c1.checkbox("Only cases the calibrated model gets wrong", key="only_wrong")
+        only_changed = c2.checkbox(
+            "Only cases where calibration changed the decision", key="only_changed"
+        )
+        view = rows_df
+        if only_wrong:
+            view = view[~view["cal_correct"]]
+        if only_changed:
+            view = view[view["raw_choice"] != view["cal_choice"]]
+        shown = pd.DataFrame(
+            {
+                "id": view["id"],
+                "true label": view["label"],
+                "raw": [
+                    f"{c} ({p:.0%})"
+                    for c, p in zip(view["raw_choice"], view["raw_conf"], strict=True)
+                ],
+                "calibrated": [
+                    f"{c} ({p:.0%})"
+                    for c, p in zip(view["cal_choice"], view["cal_conf"], strict=True)
+                ],
+                "case": view["text"].str.slice(0, 160),
+            }
+        )
+        st.caption(f"{len(shown)} of {len(rows_df)} test cases · {model_id}")
+        st.dataframe(shown, hide_index=True)  # pyright: ignore[reportUnknownMemberType]
 
-    if len(view):
-        case_id = st.selectbox("Look at one case", list(view["id"]), key="case") or ""
-        case = rows_df[rows_df["id"] == case_id].iloc[0]
-        st.markdown(f"**True label:** {case['label']}")
-        st.text(str(case["text"]) or "(case text not available)")
-        per_model: list[dict[str, Any]] = []
-        for other in task_models:
-            r = _rows(str(ROOT), mode, task, other, stamp)
-            hit = r[r["id"] == case_id]
-            if hit.empty:
-                continue
-            h = hit.iloc[0]
-            per_model.append(
-                {
-                    "model": other,
-                    "raw": f"{h['raw_choice']} ({h['raw_conf']:.0%})",
-                    "calibrated": f"{h['cal_choice']} ({h['cal_conf']:.0%})",
-                    "correct after calibration": "yes" if h["cal_correct"] else "no",
-                }
-            )
-        st.dataframe(pd.DataFrame(per_model), hide_index=True)  # pyright: ignore[reportUnknownMemberType]
+        if len(view):
+            case_id = st.selectbox("Look at one case", list(view["id"]), key="case") or ""
+            case = rows_df[rows_df["id"] == case_id].iloc[0]
+            st.markdown(f"**True label:** {case['label']}")
+            st.text(str(case["text"]) or "(case text not available)")
+            per_model: list[dict[str, Any]] = []
+            for other in task_models:
+                try:
+                    r = _rows(str(ROOT), mode, task, other, stamp)
+                except data.AppDataError:
+                    continue
+                hit = r[r["id"] == case_id]
+                if hit.empty:
+                    continue
+                h = hit.iloc[0]
+                per_model.append(
+                    {
+                        "model": other,
+                        "raw": f"{h['raw_choice']} ({h['raw_conf']:.0%})",
+                        "calibrated": f"{h['cal_choice']} ({h['cal_conf']:.0%})",
+                        "correct after calibration": "yes" if h["cal_correct"] else "no",
+                    }
+                )
+            st.dataframe(pd.DataFrame(per_model), hide_index=True)  # pyright: ignore[reportUnknownMemberType]
 
     # ---- live box: one typed case, scored by the real model, then calibrated ----
     st.divider()
@@ -306,12 +324,10 @@ with examples:
     if reason:
         st.info(reason)
     else:
-        if "live_budget" not in st.session_state:
-            st.session_state["live_budget"] = Budget(cap_usd=live.LIVE_BOX_CAP_USD)
-        budget: Budget = st.session_state["live_budget"]
+        budget: Budget = live.app_budget()  # one cap for the whole app, not per tab
         st.caption(
             f"Sends the text below to {live.LIVE_MODEL} (a real, paid call; the true label is "
-            f"never sent) and applies the live run's calibrator. Session cap "
+            f"never sent) and applies the live run's calibrator. App-wide cap "
             f"${live.LIVE_BOX_CAP_USD:.2f}, spent so far ${budget.spent_usd:.4f}."
         )
         with st.form("live_form"):

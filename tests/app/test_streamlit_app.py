@@ -99,3 +99,19 @@ def test_live_box_needs_a_live_run(toy_root: Path, monkeypatch: pytest.MonkeyPat
     assert not at.exception
     assert "live_submit" not in [b.key for b in at.button]
     assert any("live run" in i.value for i in at.info)
+
+
+def test_clean_clone_with_only_metrics_does_not_crash(
+    toy_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for f in (toy_root / "artifacts_mock").glob("*/*/metrics.json"):
+        dest = tmp_path / "artifacts" / f.parent.parent.name / f.parent.name / "metrics.json"
+        dest.parent.mkdir(parents=True)
+        dest.write_text(f.read_text())
+    monkeypatch.setenv("RECAL_ROOT", str(tmp_path))
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("not in the repo" in i.value for i in at.info)
+    assert len(at.tabs) == 4

@@ -20,7 +20,7 @@ TASK = "osha_amputation"  # binary, state {narrative: ...}
 MODEL_ID = "jev@jev-1.14.0"
 
 
-def _live_artifacts(root: Path, model_id: str = MODEL_ID) -> None:
+def _live_artifacts(root: Path, model_id: str = MODEL_ID, scores_fp: str = "x") -> None:
     """A live selected.json + fitted Platt calibrator, as the calibrate stage writes them."""
     d = Paths(root, "live").artifacts_root() / TASK / MODEL_ID
     (d / "calibrators").mkdir(parents=True)
@@ -39,10 +39,12 @@ def _live_artifacts(root: Path, model_id: str = MODEL_ID) -> None:
                 "kind": "binary",
                 "keys": ["yes", "no"],
                 "selected": "platt",
-                "scores_fingerprint": "x",
+                "scores_fingerprint": scores_fp,
             }
         )
     )
+    (d / "meta.json").write_text(json.dumps({"fingerprint": "x", "model_id": MODEL_ID}))
+    (d / "scores.parquet").write_bytes(b"")  # read_meta wants the pair complete
 
 
 SENT: list[dict[str, Any]] = []
@@ -127,3 +129,16 @@ def test_calibrator_for_another_model_version_is_refused(tmp_path: Path, key: No
     _live_artifacts(tmp_path, model_id="jev@jev-1.13.0")
     with pytest.raises(live.LiveBoxError, match="jev-1.13.0"):
         live.score_live(tmp_path, TASK, {"narrative": "x"}, Budget(cap_usd=1.0))
+
+
+def test_calibrator_fitted_on_other_scores_is_refused(tmp_path: Path, key: None) -> None:
+    # CLAUDE.md: never apply a calibrator to scores with a different fingerprint.
+    _live_artifacts(tmp_path, scores_fp="older-scores")
+    with pytest.raises(live.LiveBoxError, match="different scores"):
+        live.score_live(tmp_path, TASK, {"narrative": "x"}, Budget(cap_usd=1.0))
+
+
+def test_one_live_box_budget_per_app_process() -> None:
+    # Reloading the page or opening a new tab must not reset the cap.
+    assert live.app_budget() is live.app_budget()
+    assert live.app_budget().cap_usd == live.LIVE_BOX_CAP_USD

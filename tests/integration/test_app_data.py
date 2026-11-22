@@ -138,3 +138,18 @@ def test_calibrated_rows_missing_is_refused(toy: Paths) -> None:
             data.test_rows(toy, pair)
     finally:
         original.to_parquet(path)
+
+
+def test_committed_metrics_without_per_case_files_is_a_clear_error(
+    toy: Paths, tmp_path: Path
+) -> None:
+    # A clean clone has the live metrics.json but not scores/calibrated/selected (gitignored).
+    pair = _pair(toy, "toy_binary")
+    clone = Paths(tmp_path, "mock")
+    d = clone.artifacts_root() / pair.task / pair.model_id
+    d.mkdir(parents=True)
+    (d / "metrics.json").write_text(
+        (toy.artifacts_root() / pair.task / pair.model_id / "metrics.json").read_text()
+    )
+    with pytest.raises(data.AppDataError, match="not in the repo"):
+        data.test_rows(clone, _pair(clone, "toy_binary"))

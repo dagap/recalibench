@@ -20,6 +20,7 @@ from recalibench.pipeline.scores_io import read_scores
 from recalibench.report.collect import Pair, ReportData, collect
 
 CALIBRATED = "calibrated.parquet"
+PER_CASE_FILES = ("meta.json", "scores.parquet", "selected.json", CALIBRATED)
 MODES: tuple[Mode, ...] = ("live", "mock")
 
 
@@ -73,6 +74,13 @@ def _case_text(paths: Paths, task: str) -> dict[str, str]:
 def test_rows(paths: Paths, pair: Pair) -> pd.DataFrame:
     """One row per test item: label, raw and calibrated probabilities, decisions, case text."""
     directory = pair_dir(paths, pair)
+    missing = [f for f in PER_CASE_FILES if not (directory / f).is_file()]
+    if missing:
+        raise AppDataError(
+            f"Per-case data for {pair.task} × {pair.model_id} is not in the repo (only "
+            f"metrics.json is committed; missing {', '.join(missing)}). Run the pipeline "
+            "locally to browse cases."
+        )
     scores = read_scores(directory)
     selected = read_selected(directory)
     if selected is None or selected.get("scores_fingerprint") != scores.meta["fingerprint"]:

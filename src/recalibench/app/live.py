@@ -22,9 +22,11 @@ from recalibench.core.types import Item
 from recalibench.models.budget import Budget
 from recalibench.models.context import NeedsContext, RunContext
 from recalibench.pipeline.calibrate import read_selected
+from recalibench.pipeline.scores_io import read_meta
 
 LIVE_MODEL = "jev"
-LIVE_BOX_CAP_USD = 0.05  # per app session; one case costs well under a cent
+LIVE_BOX_CAP_USD = 0.05  # per app process (all tabs and reloads); a case costs < 1 cent
+_APP_BUDGET: Budget | None = None
 
 
 class LiveBoxError(Exception):
@@ -39,6 +41,14 @@ class LiveResult:
     selected: str
     model_id: str
     cost_usd: float
+
+
+def app_budget() -> Budget:
+    """The live box's one Budget for this app process, shared by every session."""
+    global _APP_BUDGET
+    if _APP_BUDGET is None:
+        _APP_BUDGET = Budget(cap_usd=LIVE_BOX_CAP_USD)
+    return _APP_BUDGET
 
 
 def state_fields(task: str, reg: Registry | None = None) -> list[str]:
@@ -82,6 +92,12 @@ def score_live(
         raise LiveBoxError(
             f"the calibrator was fitted on {selected['model_id']}, but the live model is "
             f"{model_id}; re-run the live pipeline"
+        )
+    meta = read_meta(directory)
+    if meta is None or selected.get("scores_fingerprint") != meta.get("fingerprint"):
+        raise LiveBoxError(
+            f"the {task} calibrator was fitted on different scores than the current ones; "
+            "re-run `recal calibrate` and `recal evaluate` in live mode"
         )
     model = reg.model(LIVE_MODEL)
     if isinstance(model, NeedsContext):

@@ -1,0 +1,6 @@
+tasks: [osha_amputation, osha_event_type, wc_large_loss]
+models: [jev, tfidf_logreg]
+calibrators: auto          # every calibrator compatible with the task
+extras:
+  wording:  {task: osha_amputation, model: jev, phrasings: 3}
+  transfer: {from: osha_amputation, to: wc_large_loss, model: jev}

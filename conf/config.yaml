@@ -1,0 +1,9 @@
+defaults: [experiment: demo, _self_]
+mode: mock                 # mock | live
+seed: 42
+sample_size: 3000          # per task, stratified on label; a task may override
+splits: {fit: 0.6, val: 0.2, test: 0.2}
+budget_usd: 5.0            # hard stop across the whole run, all models
+ece_bins: 15
+bootstrap_iters: 1000
+mlflow: {enabled: false}

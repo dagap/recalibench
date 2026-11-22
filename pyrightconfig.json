@@ -1,0 +1,17 @@
+{
+  "include": ["src", "tests"],
+  "exclude": [".venv", "**/__pycache__"],
+  "pythonVersion": "3.13",
+  "venvPath": ".",
+  "venv": ".venv",
+  "typeCheckingMode": "basic",
+  "reportPrivateImportUsage": "error",
+  "reportCallIssue": "error",
+  "reportIndexIssue": "error",
+  "reportOperatorIssue": "error",
+  "reportInvalidTypeForm": "error",
+  "reportAttributeAccessIssue": "error",
+  "reportOptionalMemberAccess": "error",
+  "reportOptionalCall": "error",
+  "reportArgumentType": "error"
+}

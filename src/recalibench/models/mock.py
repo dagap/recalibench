@@ -5,7 +5,8 @@ and for building the pipeline without an API key.
 """
 
 import json
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 
 from recalibench.core.types import Item, Question
 from recalibench.models.base_api import ApiModel, ParseError, Usage
@@ -22,22 +23,29 @@ class MockModel(ApiModel):
         kwargs.setdefault("api_key_env", "")
         super().__init__(name=name, version=version, **kwargs)
 
-    def build_request(self, item: Item, question: Question) -> dict[str, Any]:
-        return {"state": item.state, "question": question.text}
+    def build_request(self, item: Item, questions: Mapping[str, Question]) -> dict[str, Any]:
+        return {"state": item.state, "questions": {n: q.text for n, q in questions.items()}}
 
     def fake_response(
-        self, request: dict[str, Any], question: Question, probs: dict[str, float]
+        self,
+        request: dict[str, Any],
+        questions: Mapping[str, Question],
+        probs: Mapping[str, dict[str, float]],
     ) -> dict[str, Any]:
-        return {"probs": probs}
+        return {"answers": {n: dict(p) for n, p in probs.items()}}
 
     def parse_response(
-        self, raw: dict[str, Any], question: Question
-    ) -> tuple[dict[str, float], Usage]:
+        self, raw: dict[str, Any], questions: Mapping[str, Question]
+    ) -> tuple[dict[str, dict[str, float]], Usage]:
         try:
-            probs = {str(k): float(v) for k, v in raw["probs"].items()}
+            answers = cast(dict[str, Any], raw["answers"])
+            parsed = {
+                n: {str(k): float(v) for k, v in cast(dict[str, Any], answers[n]).items()}
+                for n in questions
+            }
         except (KeyError, TypeError, ValueError, AttributeError) as e:
             raise ParseError(f"bad mock response: {e}") from e
-        return probs, Usage(0, 0)
+        return parsed, Usage(0, 0)
 
     def count_tokens(self, request: dict[str, Any]) -> int:
         return len(json.dumps(request)) // 3 + 1

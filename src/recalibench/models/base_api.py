@@ -1,29 +1,39 @@
 """ApiModel: the base class for hosted models.
 
-An adapter (e.g. jev.py) implements only the wire format:
-    build_request(item, question) -> dict          the JSON body for one call
-    parse_response(raw, question) -> (probs, Usage) probs keyed by question.keys
-    fake_response(request, question, probs) -> dict a reply shaped like the real API
-    count_tokens(request) -> int                    estimate, for the pre-run budget check
-    price(usage) -> float                           USD for one call
-    headers() -> dict                               auth etc. (read keys lazily here)
+An adapter (e.g. jev.py) implements only the wire format. A request carries one
+or more named questions about one item (`questions: {name: Question}`):
+    build_request(item, questions) -> dict             the JSON body for one call
+    parse_response(raw, questions) -> ({name: probs}, Usage)
+    fake_response(request, questions, {name: probs})  a reply shaped like the real API
+    count_tokens(request) -> int                       estimate, for the budget
+    price(usage) -> float                              USD for one call
+    headers() -> dict                                  auth etc. (read keys lazily here)
 
-The base supplies: bounded concurrency, `repeats` calls per item averaged into
-probs (with their std), retries with jitter on 429/5xx/timeouts, the response
-cache, the shared budget, cost and latency tracking, per-item error isolation,
-and mock routing: with mode=mock (or `always_mock`) the network call is replaced
-by MockGenerator + fake_response, so build/parse code still runs offline.
+The base supplies: bounded concurrency, `repeats` answers per item and question
+averaged into probs (with their std), retries with jitter on 429/5xx/timeouts,
+the response cache (one entry per item x question x repeat), the shared budget,
+cost and latency tracking, per-item error isolation, and mock routing: with
+mode=mock (or `always_mock`) the network call is replaced by MockGenerator +
+fake_response, so build/parse code still runs offline.
+
+Batching (both off by default; whether it saves money depends on how the
+provider bills a shared state, which the Jev docs don't say):
+    batch_questions  all questions of predict_questions() for an item in one request
+    batch_repeats    all repeats of a question in one request (may return identical
+                     answers if the provider is deterministic within a request)
+The budget always reserves the unbatched (worst-case) cost and settles the
+actual `usage`. Batched answers are cached apart from unbatched ones.
 
 Items that fail (retries exhausted, unparseable reply) are logged, recorded in
-`last_errors` and left out of predict()'s result. Fatal API errors (401, 400,
-422, ...) and BudgetExceeded stop the whole call.
+`last_errors` and left out of the result for every question their request
+carried. Fatal API errors (401, 400, 422, ...) and BudgetExceeded stop the call.
 """
 
 import asyncio
 import logging
 import math
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -45,6 +55,7 @@ from recalibench.models.mock_generator import MockGenerator
 log = logging.getLogger(__name__)
 
 PROB_SUM_TOLERANCE = 1e-3
+SINGLE = "q"  # question name when a request carries one question
 
 
 class ParseError(Exception):
@@ -78,6 +89,15 @@ class CallResult:
     latency_ms: float
 
 
+@dataclass(frozen=True)
+class Slot:
+    """One answer we need: question `q_index`, repeat `repeat`, cached under `key`."""
+
+    q_index: int
+    repeat: int
+    key: str
+
+
 def _retry_after(response: httpx.Response) -> float | None:
     value = response.headers.get("retry-after")
     try:
@@ -86,14 +106,14 @@ def _retry_after(response: httpx.Response) -> float | None:
         return None
 
 
-def validate_probs(probs: dict[str, float], question: Question) -> dict[str, float]:
+def validate_probs(probs: Mapping[str, float], question: Question) -> dict[str, float]:
     """Exactly the question's keys, finite, in [0, 1], summing to 1 (renormalised)."""
     keys = set(question.keys)
     if set(probs) != keys:
         raise ParseError(f"expected probabilities for {sorted(keys)}, got {sorted(probs)}")
     values = list(probs.values())
     if any(not math.isfinite(v) or v < -1e-9 or v > 1 + 1e-9 for v in values):
-        raise ParseError(f"probabilities out of range: {probs}")
+        raise ParseError(f"probabilities out of range: {dict(probs)}")
     total = sum(values)
     if abs(total - 1.0) > PROB_SUM_TOLERANCE:
         raise ParseError(f"probabilities sum to {total:.6f}, not 1")
@@ -118,6 +138,8 @@ class ApiModel:
         max_attempts: int = 5,
         backoff_s: float = 1.0,
         backoff_max_s: float = 30.0,
+        batch_questions: bool = False,
+        batch_repeats: bool = False,
         mock: dict[str, float] | None = None,
     ) -> None:
         if repeats < 1 or concurrency < 1 or max_attempts < 1:
@@ -133,6 +155,8 @@ class ApiModel:
         self.max_attempts = max_attempts
         self.backoff_s = backoff_s
         self.backoff_max_s = backoff_max_s
+        self.batch_questions = batch_questions
+        self.batch_repeats = batch_repeats
         self.mock_generator = MockGenerator(**(mock or {}))
         self.last_errors: dict[str, str] = {}
         self._ctx: RunContext | None = None
@@ -147,16 +171,19 @@ class ApiModel:
     def headers(self) -> dict[str, str]:
         return {}
 
-    def build_request(self, item: Item, question: Question) -> dict[str, Any]:
+    def build_request(self, item: Item, questions: Mapping[str, Question]) -> dict[str, Any]:
         raise NotImplementedError
 
     def parse_response(
-        self, raw: dict[str, Any], question: Question
-    ) -> tuple[dict[str, float], Usage]:
+        self, raw: dict[str, Any], questions: Mapping[str, Question]
+    ) -> tuple[dict[str, dict[str, float]], Usage]:
         raise NotImplementedError
 
     def fake_response(
-        self, request: dict[str, Any], question: Question, probs: dict[str, float]
+        self,
+        request: dict[str, Any],
+        questions: Mapping[str, Question],
+        probs: Mapping[str, dict[str, float]],
     ) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -181,41 +208,42 @@ class ApiModel:
     def fit(self, items: list[Item], question: Question) -> None:
         return None
 
+    def _single_cost(self, item: Item, question: Question) -> float:
+        request = self.build_request(item, {SINGLE: question})
+        return self.price(Usage(self.count_tokens(request)))
+
     def estimate_cost(self, items: list[Item], question: Question) -> float:
-        """Cost of a live run over `items`, ignoring the cache (an upper bound)."""
-        per_item = (
-            self.price(Usage(self.count_tokens(self.build_request(i, question)))) for i in items
-        )
-        return sum(per_item) * self.repeats
+        """Cost of a live, unbatched run over `items`, ignoring the cache (an upper bound)."""
+        return sum(self._single_cost(i, question) for i in items) * self.repeats
+
+    def estimate_cost_questions(self, items: list[Item], questions: Sequence[Question]) -> float:
+        """Upper bound for predict_questions(): batching is assumed to save nothing."""
+        return sum(self.estimate_cost(items, q) for q in questions)
 
     async def predict(self, items: list[Item], question: Question) -> list[Prediction]:
-        if question.kind not in self.supports:
-            raise ValueError(f"{self.model_id} does not support {question.kind!r} questions")
+        return (await self.predict_questions(items, [question]))[0]
+
+    async def predict_questions(
+        self, items: list[Item], questions: Sequence[Question]
+    ) -> list[list[Prediction]]:
+        """Predictions per question, in the order given (e.g. phrasings of one task)."""
+        for q in questions:
+            if q.kind not in self.supports:
+                raise ValueError(f"{self.model_id} does not support {q.kind!r} questions")
         if self._ctx is None:
             raise RuntimeError(f"{self.model_id}: call bind(RunContext) before predict()")
         ctx = self._ctx
         self.last_errors = {}
         cache = ResponseCache(ctx.paths.cache_dir(self.name, self.version))
         sem = asyncio.Semaphore(self.concurrency)
-        namespace = self.mock_generator.namespace() if self.mocked else ""
         try:
             async with httpx.AsyncClient(timeout=self.timeout_s) as client:
-
-                async def one(item: Item, r: int) -> CallResult:
-                    return await self._call(client, sem, cache, ctx, item, question, r, namespace)
-
-                async def per_item(item: Item) -> Prediction | None:
-                    try:
-                        results = await asyncio.gather(*(one(item, r) for r in range(self.repeats)))
-                    except ItemFailed as e:
-                        self.last_errors[item.id] = str(e)
-                        log.warning("%s: item %s failed: %s", self.model_id, item.id, e)
-                        return None
-                    return self._aggregate(item, list(results))
-
-                tasks = [asyncio.create_task(per_item(i)) for i in items]
+                tasks = [
+                    asyncio.create_task(self._item(client, sem, cache, ctx, item, questions))
+                    for item in items
+                ]
                 try:
-                    done = await asyncio.gather(*tasks)
+                    per_item = await asyncio.gather(*tasks)
                 except (BudgetExceeded, FatalApiError):
                     for t in tasks:
                         t.cancel()
@@ -223,9 +251,84 @@ class ApiModel:
                     raise
         finally:
             cache.close()
-        return [p for p in done if p is not None]
+        out: list[list[Prediction]] = [[] for _ in questions]
+        for preds in per_item:
+            for qi, pred in enumerate(preds):
+                if pred is not None:
+                    out[qi].append(pred)
+        return out
 
     # ---- internals -----------------------------------------------------------------
+    def _namespace(self) -> str:
+        parts: list[str] = []
+        if self.mocked:
+            parts.append(self.mock_generator.namespace())
+        if self.batch_questions or self.batch_repeats:
+            parts.append(f"batch:q={int(self.batch_questions)}:r={int(self.batch_repeats)}")
+        return "|".join(parts)
+
+    def _group(self, slots: list[Slot]) -> list[list[Slot]]:
+        """Which missing answers share a request."""
+        if not slots:
+            return []
+        if self.batch_questions and self.batch_repeats:
+            return [slots]
+        if self.batch_questions or self.batch_repeats:
+            groups: dict[int, list[Slot]] = {}
+            for s in slots:
+                groups.setdefault(s.repeat if self.batch_questions else s.q_index, []).append(s)
+            return list(groups.values())
+        return [[s] for s in slots]
+
+    async def _item(
+        self,
+        client: httpx.AsyncClient,
+        sem: asyncio.Semaphore,
+        cache: ResponseCache,
+        ctx: RunContext,
+        item: Item,
+        questions: Sequence[Question],
+    ) -> list[Prediction | None]:
+        namespace = self._namespace()
+        results: dict[tuple[int, int], CallResult] = {}
+        missing: list[Slot] = []
+        for qi, q in enumerate(questions):
+            for r in range(self.repeats):
+                key = cache_key(item.state, q, r, namespace)
+                hit = cache.get(key)
+                if hit is None:
+                    missing.append(Slot(qi, r, key))
+                else:
+                    results[(qi, r)] = CallResult(
+                        probs={str(k): float(v) for k, v in hit["probs"].items()},
+                        cost_usd=float(hit["cost_usd"]),
+                        latency_ms=float(hit["latency_ms"]),
+                    )
+        groups = self._group(missing)
+        outcomes = await asyncio.gather(
+            *(self._request(client, sem, cache, ctx, item, questions, g) for g in groups),
+            return_exceptions=True,
+        )
+        failed: dict[int, str] = {}
+        for group, outcome in zip(groups, outcomes, strict=True):
+            if isinstance(outcome, ItemFailed):
+                for s in group:
+                    failed[s.q_index] = str(outcome)
+            elif isinstance(outcome, BaseException):
+                raise outcome
+            else:
+                results.update(outcome)
+        if failed:
+            reasons = sorted(set(failed.values()))
+            self.last_errors[item.id] = "; ".join(reasons)
+            log.warning("%s: item %s failed: %s", self.model_id, item.id, "; ".join(reasons))
+        return [
+            None
+            if qi in failed
+            else self._aggregate(item, [results[(qi, r)] for r in range(self.repeats)])
+            for qi in range(len(questions))
+        ]
+
     def _aggregate(self, item: Item, results: list[CallResult]) -> Prediction:
         keys = list(results[0].probs)
         probs = {k: sum(r.probs[k] for r in results) / len(results) for k in keys}
@@ -244,41 +347,39 @@ class ApiModel:
             cost_usd=sum(r.cost_usd for r in results),
         )
 
-    async def _call(
+    async def _request(
         self,
         client: httpx.AsyncClient,
         sem: asyncio.Semaphore,
         cache: ResponseCache,
         ctx: RunContext,
         item: Item,
-        question: Question,
-        repeat_idx: int,
-        namespace: str,
-    ) -> CallResult:
-        key = cache_key(item.state, question, repeat_idx, namespace)
-        hit = cache.get(key)
-        if hit is not None:
-            return CallResult(
-                probs={str(k): float(v) for k, v in hit["probs"].items()},
-                cost_usd=float(hit["cost_usd"]),
-                latency_ms=float(hit["latency_ms"]),
-            )
-        request = self.build_request(item, question)
+        questions: Sequence[Question],
+        group: list[Slot],
+    ) -> dict[tuple[int, int], CallResult]:
+        """One request for every slot in `group`; caches each answer separately."""
+        names = {(SINGLE if len(group) == 1 else f"q{s.q_index}r{s.repeat}"): s for s in group}
+        qmap = {n: questions[s.q_index] for n, s in names.items()}
+        request = self.build_request(item, qmap)
         if self.mocked:
-            probs = self.mock_generator.probs(self.name, item, question, repeat_idx)
-            raw = self.fake_response(request, question, probs)
-            latency_ms, cost = 0.0, 0.0
-            parsed = self._parse(raw, question, item)[0]
+            fake = {
+                n: self.mock_generator.probs(self.name, item, qmap[n], s.repeat)
+                for n, s in names.items()
+            }
+            raw = self.fake_response(request, qmap, fake)
+            parsed = self._parse(raw, qmap)[0]
+            cost, latency_ms = 0.0, 0.0
         else:
-            estimate = self.price(Usage(self.count_tokens(request)))
+            # Reserve the worst case: as if every question were sent on its own.
+            estimate = sum(self._single_cost(item, q) for q in qmap.values())
             ctx.budget.reserve(estimate)
             settled = False
             try:
                 start = time.perf_counter()
-                raw = await self._post(client, sem, request, item)
+                raw = await self._post(client, sem, request)
                 latency_ms = (time.perf_counter() - start) * 1000
                 try:
-                    parsed, usage = self._parse(raw, question, item)
+                    parsed, usage = self._parse(raw, qmap)
                 except ItemFailed:
                     ctx.budget.settle(self.model_id, estimate, estimate)  # billed, unusable
                     settled = True
@@ -289,15 +390,31 @@ class ApiModel:
             finally:
                 if not settled:
                     ctx.budget.settle(self.model_id, estimate, 0.0)
-        cache.set(key, {"raw": raw, "probs": parsed, "cost_usd": cost, "latency_ms": latency_ms})
-        return CallResult(parsed, cost, latency_ms)
+        share = cost / len(group)
+        out: dict[tuple[int, int], CallResult] = {}
+        for n, s in names.items():
+            cache.set(
+                s.key,
+                {
+                    "raw": raw,
+                    "name": n,
+                    "probs": parsed[n],
+                    "cost_usd": share,
+                    "latency_ms": latency_ms,
+                },
+            )
+            out[(s.q_index, s.repeat)] = CallResult(parsed[n], share, latency_ms)
+        return out
 
     def _parse(
-        self, raw: dict[str, Any], question: Question, item: Item
-    ) -> tuple[dict[str, float], Usage]:
+        self, raw: dict[str, Any], questions: Mapping[str, Question]
+    ) -> tuple[dict[str, dict[str, float]], Usage]:
         try:
-            probs, usage = self.parse_response(raw, question)
-            return validate_probs(probs, question), usage
+            by_name, usage = self.parse_response(raw, questions)
+            missing = set(questions) - set(by_name)
+            if missing:
+                raise ParseError(f"no answer for {sorted(missing)}")
+            return {n: validate_probs(by_name[n], q) for n, q in questions.items()}, usage
         except ParseError as e:
             raise ItemFailed(f"unparseable response: {e}") from e
 
@@ -308,11 +425,7 @@ class ApiModel:
         return float(self._jitter(state))
 
     async def _post(
-        self,
-        client: httpx.AsyncClient,
-        sem: asyncio.Semaphore,
-        request: dict[str, Any],
-        item: Item,
+        self, client: httpx.AsyncClient, sem: asyncio.Semaphore, request: dict[str, Any]
     ) -> dict[str, Any]:
         retrying = AsyncRetrying(
             stop=stop_after_attempt(self.max_attempts),

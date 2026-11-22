@@ -224,7 +224,7 @@ def test_budget_estimate_refuses_before_any_call(tmp_path: Path) -> None:
 @respx.mock
 def test_budget_stops_the_run_at_the_cap(tmp_path: Path) -> None:
     model = _jev(concurrency=1)
-    tokens = model.count_tokens(model.build_request(_items(1)[0], BINARY))
+    tokens = model.count_tokens(model.build_request(_items(1)[0], {"q": BINARY}))
     route = respx.post(URL).mock(return_value=_ok(tokens=tokens))  # actual == estimate
     per_call = model.estimate_cost(_items(1), BINARY)
     budget = _bind(model, tmp_path, cap=per_call * 3.5)
@@ -300,3 +300,110 @@ def test_mock_mode_runs_the_adapter_offline(tmp_path: Path) -> None:
 def test_predict_requires_bind() -> None:
     with pytest.raises(RuntimeError, match="bind"):
         _run(_jev(), _items(1))
+
+
+# ---- batching (off by default; see base_api.py) ------------------------------------
+
+PHRASINGS = [
+    Question(kind="binary", text="Did this incident result in an amputation?"),
+    Question(kind="binary", text="Was a body part lost in this incident?"),
+    Question(kind="binary", text="Did the worker suffer an amputation?"),
+]
+
+
+def _echo(request: httpx.Request) -> httpx.Response:
+    """Answer every named question; P(yes) encodes which phrasing was asked."""
+    body = json.loads(request.content)
+    answers = {
+        name: {
+            "type": "noul",
+            "noul": 0.1 * (1 + [q.text for q in PHRASINGS].index(q["instructions"])),
+        }
+        for name, q in body["questions"].items()
+    }
+    return httpx.Response(
+        200,
+        json={"model": "jev-1.13.0", "answers": answers, "usage": {"input_tokens": 90}},
+    )
+
+
+@pytest.mark.parametrize(
+    ("batch_questions", "batch_repeats", "calls_per_item", "questions_per_call"),
+    [(False, False, 6, 1), (True, False, 2, 3), (False, True, 3, 2), (True, True, 1, 6)],
+)
+@respx.mock
+def test_batching_groups_requests(
+    tmp_path: Path,
+    batch_questions: bool,
+    batch_repeats: bool,
+    calls_per_item: int,
+    questions_per_call: int,
+) -> None:
+    route = respx.post(URL).mock(side_effect=_echo)
+    model = _jev(repeats=2, batch_questions=batch_questions, batch_repeats=batch_repeats)
+    budget = _bind(model, tmp_path)
+    per_q = asyncio.run(model.predict_questions(_items(4), PHRASINGS))
+    assert route.call_count == 4 * calls_per_item
+    requests: list[httpx.Request] = [call.request for call in route.calls]  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    sizes = {len(json.loads(r.content)["questions"]) for r in requests}
+    assert sizes == {questions_per_call}
+    for qi, preds in enumerate(per_q):  # each phrasing got its own answers back
+        assert [p.probs["yes"] for p in preds] == pytest.approx([0.1 * (qi + 1)] * 4)
+    # Actual spend: 90 tokens per request, however many questions it carried.
+    assert budget.spent_usd == pytest.approx(4 * calls_per_item * 90 * 0.042 / 1e6)
+    per_pred = sum(p.cost_usd for preds in per_q for p in preds)
+    assert per_pred == pytest.approx(budget.spent_usd)  # cost is shared out, not double-counted
+
+
+@respx.mock
+def test_batched_answers_are_cached_apart_from_unbatched(tmp_path: Path) -> None:
+    route = respx.post(URL).mock(side_effect=_echo)
+    plain = _jev()
+    _bind(plain, tmp_path)
+    asyncio.run(plain.predict_questions(_items(2), PHRASINGS))
+    assert route.call_count == 6
+    batched = _jev(batch_questions=True)
+    _bind(batched, tmp_path)
+    asyncio.run(batched.predict_questions(_items(2), PHRASINGS))
+    assert route.call_count == 8  # batched answers may differ, so no reuse
+    asyncio.run(batched.predict_questions(_items(2), PHRASINGS))
+    assert route.call_count == 8  # but batched re-runs hit their own cache
+
+
+@respx.mock
+def test_batched_failure_drops_the_item_for_every_question_it_carried(tmp_path: Path) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content)["state"]["narrative"] == "case 1":
+            return httpx.Response(503)
+        return _echo(request)
+
+    respx.post(URL).mock(side_effect=respond)
+    model = _jev(batch_questions=True, max_attempts=2)
+    _bind(model, tmp_path)
+    per_q = asyncio.run(model.predict_questions(_items(3), PHRASINGS))
+    assert all([p.item_id for p in preds] == ["i0", "i2"] for preds in per_q)
+    assert "i1" in model.last_errors
+
+
+@respx.mock
+def test_budget_reserves_the_unbatched_worst_case(tmp_path: Path) -> None:
+    route = respx.post(URL).mock(side_effect=_echo)
+    model = _jev(batch_questions=True)
+    single = model.estimate_cost(_items(1), PHRASINGS[0])
+    _bind(model, tmp_path, cap=single * 2.5)  # room for 2 single questions, not 3
+    with pytest.raises(BudgetExceeded):
+        asyncio.run(model.predict_questions(_items(1), PHRASINGS))
+    assert route.call_count == 0
+    singles = sum(model.estimate_cost(_items(1), q) for q in PHRASINGS)
+    assert model.estimate_cost_questions(_items(1), PHRASINGS) == pytest.approx(singles)
+
+
+@respx.mock(assert_all_called=False)
+def test_batching_works_in_mock_mode(tmp_path: Path) -> None:
+    route = respx.post(URL)
+    model = _jev(repeats=3, batch_questions=True, batch_repeats=True)
+    _bind(model, tmp_path, mode="mock")
+    per_q = asyncio.run(model.predict_questions(_items(5), PHRASINGS))
+    assert route.call_count == 0
+    assert [len(p) for p in per_q] == [5, 5, 5]
+    assert all(p.std is not None and p.std["yes"] > 0 for preds in per_q for p in preds)

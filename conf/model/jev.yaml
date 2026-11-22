@@ -1,5 +1,5 @@
 _target_: recalibench.models.jev.JevModel
-version: jev-1.13.0        # pinned; never jev-latest (jev-1.14.0 is newest as of 2026-11)
+version: jev-1.14.0        # pinned; never jev-latest (which points here as of 2026-11)
 base_url: https://api.typesafe.ai/v1
 api_key_env: TYPESAFE_API_KEY
 repeats: 3                 # calls per item, probabilities averaged
@@ -9,6 +9,8 @@ price_per_m_input_tokens: 0.042
 max_attempts: 5            # retries 429, 529, other 5xx, timeouts
 backoff_s: 1.0
 backoff_max_s: 30.0
+batch_questions: false     # all phrasings of an item in one request; on only if Jev bills state once
+batch_repeats: false       # all repeats in one request; on only if repeats still differ when batched
 mock:                      # what mode=mock returns instead of calling the API
   signal: 1.0
   binary_slope: 0.6        # under-confident on yes/no

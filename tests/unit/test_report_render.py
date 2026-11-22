@@ -99,7 +99,7 @@ def test_unknown_or_partial_experiment_falls_back(tmp_path: Path) -> None:
 
 def test_not_evaluated_listed(tmp_path: Path) -> None:
     data = _data(tmp_path)
-    data.not_evaluated.append(("t_bin", "late@9"))
+    data.not_evaluated.append(("t_bin", "late@9", "no metrics.json"))
     assert "late@9" in _section(_render(data), "summary")
 
 
@@ -127,3 +127,23 @@ def test_cost_tolerates_null_latency_and_cost(tmp_path: Path) -> None:
         p.metrics["cost_usd"] = None
     cost = _section(_render(data), "cost")
     assert "$0.0000" in cost and "—" in cost
+
+
+def test_null_aurc_renders_dash(tmp_path: Path) -> None:
+    data = _data(tmp_path)
+    p = data.pairs[0]
+    p.metrics["selective"]["raw"]["aurc"] = None
+    section = _section(_render(data), f"pair-{p.task}-{p.model_id}")
+    aurc = re.search(r"<tr><th[^>]*>AURC.*?</tr>", section)
+    assert aurc is not None and "—" in aurc.group(0)
+    assert "AURC —" in section  # the risk-coverage legend too
+
+
+def test_pair_with_broken_fields_still_renders(tmp_path: Path) -> None:
+    data = _data(tmp_path)
+    p = data.pairs[0]
+    del p.metrics["selective"]
+    html = _render(data)
+    section = _section(html, f"pair-{p.task}-{p.model_id}")
+    assert "could not be rendered" in section
+    assert 'id="pair-t_cho-m@1"' in html  # the other pairs are unaffected

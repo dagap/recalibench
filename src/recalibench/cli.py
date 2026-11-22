@@ -17,7 +17,7 @@ from recalibench.core.paths import Paths
 from recalibench.core.registry import GROUPS, Group, PluginError, Registry
 from recalibench.datasets.manifest import DownloadError
 from recalibench.models.base_api import FatalApiError
-from recalibench.models.budget import BudgetExceeded
+from recalibench.models.budget import Budget, BudgetExceeded
 from recalibench.pipeline import calibrate as calibrate_stage
 from recalibench.pipeline import download as download_stage
 from recalibench.pipeline import evaluate as evaluate_stage
@@ -304,21 +304,20 @@ def run(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -
     """Run the pipeline end to end: download, prepare, score, calibrate, evaluate,
     experiments, report."""
     reg, paths, cfg = _setup(ctx, overrides)
-    try:
+    budget = Budget(cap_usd=float(cfg.budget_usd))  # one per run, shared by every stage
+    try:  # each stage reports as it finishes, so a later failure keeps earlier summaries
         download_stage.download(reg, paths, download_stage.datasets_for(reg, cfg))
         prepare_stage.prepare(reg, paths, cfg, force=force)
-        results = score_stage.score(reg, paths, cfg, force=force)
-        if any(r.status == "failed" for r in results):
-            _report_scores(results)
-        calibrations = calibrate_stage.calibrate(reg, paths, cfg, force=force)
-        evaluations = evaluate_stage.evaluate(reg, paths, cfg, force=force)
-        exp_results = experiments_stage.run_experiments(reg, paths, cfg, force=force)
-        built = report_stage.build_report(paths, cfg)
+        _report_scores(score_stage.score(reg, paths, cfg, force=force, budget=budget))
+        _report_calibration(calibrate_stage.calibrate(reg, paths, cfg, force=force))
+        _report_evaluation(evaluate_stage.evaluate(reg, paths, cfg, force=force))
+        if cfg.get("limit") is not None:
+            typer.echo("  skipped   experiments and report: limit=N is a smoke run")
+            return
+        _report_experiments(
+            experiments_stage.run_experiments(reg, paths, cfg, force=force, budget=budget)
+        )
+        _report_built(*report_stage.build_report(paths, cfg))
     except STAGE_ERRORS as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=2 if isinstance(e, DownloadError) else 1) from e
-    _report_scores(results)
-    _report_calibration(calibrations)
-    _report_experiments(exp_results)
-    _report_built(*built)
-    _report_evaluation(evaluations)

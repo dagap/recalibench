@@ -32,7 +32,7 @@ class Pair:
 class ReportData:
     mode: str
     pairs: list[Pair]
-    not_evaluated: list[tuple[str, str]]
+    not_evaluated: list[tuple[str, str, str]]  # (task, model dir, reason)
     experiments: dict[str, dict[str, Any]]
     tasks: list[str]
     models: list[str]
@@ -73,24 +73,30 @@ def _subdirs(path: Path) -> list[Path]:
 def collect(paths: Paths) -> ReportData:
     root = paths.artifacts_root()
     pairs: list[Pair] = []
-    not_evaluated: list[tuple[str, str]] = []
+    not_evaluated: list[tuple[str, str, str]] = []
     for task_dir in _subdirs(root):
         if task_dir.name.startswith("_"):
             continue
         for model_dir in _subdirs(task_dir):
             f = model_dir / METRICS_FILE
-            if f.is_file():
+            if not f.is_file():
+                not_evaluated.append((task_dir.name, model_dir.name, "no metrics.json"))
+                continue
+            try:  # one bad file (interrupted write, hand edit) must not sink the report
                 pairs.append(_pair(_read(f)))
-            else:
-                not_evaluated.append((task_dir.name, model_dir.name))
+            except (ValueError, KeyError, TypeError) as err:  # JSONDecodeError is a ValueError
+                reason = f"unreadable metrics.json ({type(err).__name__}: {err})"
+                not_evaluated.append((task_dir.name, model_dir.name, reason))
     if not pairs:
         raise ReportError(f"no {METRICS_FILE} under {root}; run `recal evaluate` first")
     pairs.sort(key=lambda p: (p.task, p.model_id))
-    experiments = {
-        d.name: _read(d / SUMMARY_FILE)
-        for d in _subdirs(paths.experiments_root())
-        if (d / SUMMARY_FILE).is_file()
-    }
+    experiments: dict[str, dict[str, Any]] = {}
+    for d in _subdirs(paths.experiments_root()):
+        if (d / SUMMARY_FILE).is_file():
+            try:
+                experiments[d.name] = _read(d / SUMMARY_FILE)
+            except ValueError as err:  # rendered as a field table by the generic fallback
+                experiments[d.name] = {"error": f"unreadable {SUMMARY_FILE}: {err}"}
     return ReportData(
         mode=paths.mode,
         pairs=pairs,

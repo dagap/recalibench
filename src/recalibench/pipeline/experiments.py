@@ -268,12 +268,17 @@ def _write(paths: Paths, result: ExperimentResult) -> None:
 
 
 def run_experiments(
-    reg: Registry, paths: Paths, cfg: DictConfig, force: bool = False
+    reg: Registry,
+    paths: Paths,
+    cfg: DictConfig,
+    force: bool = False,
+    budget: Budget | None = None,
 ) -> list[ExperimentResult]:
+    """`budget`: pass the run's shared Budget; a standalone stage makes its own."""
     if cfg.get("limit") is not None:
         raise ExperimentError("experiments don't support limit=N; smoke-test with `recal score`")
     extras = cast(dict[str, Any], OmegaConf.to_container(cfg.experiment.get("extras") or {}))
-    ctx = RunContext(paths=paths, budget=Budget(cap_usd=float(cfg.budget_usd)))
+    ctx = RunContext(paths=paths, budget=budget or Budget(cap_usd=float(cfg.budget_usd)))
     variants = _variants(reg, paths, cfg)
 
     plans: list[ScorePlan] = []

@@ -133,6 +133,10 @@ def confidence_hist_svg(pair: Pair) -> str:
     return _to_svg(fig)
 
 
+def _aurc(x: object) -> str:
+    return "—" if x is None else f"{float(str(x)):.3f}"
+
+
 def risk_coverage_svg(pair: Pair) -> str:
     """Error rate among auto-handled cases as coverage grows; lower is better."""
     fig, ax = plt.subplots(figsize=SIZE)
@@ -144,7 +148,7 @@ def risk_coverage_svg(pair: Pair) -> str:
             s["curve"]["risk"],
             lw=1.4,
             color=color,
-            label=f"{label} (AURC {float(s['aurc']):.3f})",
+            label=f"{label} (AURC {_aurc(s.get('aurc'))})",
             gid=side,
         )
     target = 1 - float(sel["raw"].get("target_accuracy", 0.95))

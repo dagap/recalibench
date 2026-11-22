@@ -214,9 +214,17 @@ def estimate_and_run(
     return results
 
 
-def score(reg: Registry, paths: Paths, cfg: DictConfig, force: bool = False) -> list[PairResult]:
+def score(
+    reg: Registry,
+    paths: Paths,
+    cfg: DictConfig,
+    force: bool = False,
+    budget: Budget | None = None,
+) -> list[PairResult]:
+    """`budget`: pass the run's shared Budget; a standalone stage makes its own."""
     limit = None if cfg.get("limit") is None else int(cfg.limit)
-    ctx = RunContext(paths=paths, budget=Budget(cap_usd=float(cfg.budget_usd)))
+    budget = budget or Budget(cap_usd=float(cfg.budget_usd))
+    ctx = RunContext(paths=paths, budget=budget)
     results: list[PairResult] = []
     plans: list[ScorePlan] = []
     for task in [str(t) for t in cfg.experiment.tasks]:

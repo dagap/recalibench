@@ -107,11 +107,8 @@ def _summary(data: ReportData) -> str:
         + _table(["task"] + [e(m) for m in data.models], rows)
     )
     if data.not_evaluated:
-        items = "".join(f"<li>{e(t)} × {e(m)}</li>" for t, m in data.not_evaluated)
-        out += (
-            "<p>Not evaluated yet (no metrics.json; run <code>recal evaluate</code>):</p>"
-            f"<ul>{items}</ul>"
-        )
+        items = "".join(f"<li>{e(t)} × {e(m)}: {e(why)}</li>" for t, m, why in data.not_evaluated)
+        out += f"<p>Left out (run <code>recal evaluate</code> to rebuild them):</p><ul>{items}</ul>"
     return out + "</section>"
 
 
@@ -157,6 +154,19 @@ def _selective_table(pair: Pair) -> str:
 
 
 def _pair_section(pair: Pair) -> str:
+    sid = f"pair-{e(pair.task)}-{e(pair.model_id)}"
+    try:
+        return _pair_body(pair)
+    except (KeyError, TypeError, ValueError, IndexError) as err:
+        return (
+            f'<section id="{sid}" class="pair"><h3>{e(pair.model_id)}</h3>'
+            f'<p class="flag-line">This pair could not be rendered: metrics.json is missing '
+            f"or has malformed fields ({e(type(err).__name__)}: {e(err)}). Re-run "
+            "<code>recal evaluate --force</code>.</p></section>"
+        )
+
+
+def _pair_body(pair: Pair) -> str:
     raw, cal = _ece(pair, "raw"), _ece(pair, "calibrated")
     verdict = (
         '<p class="flag-line">Raw already better: the selected calibrator did not lower '
@@ -180,13 +190,20 @@ def _pair_section(pair: Pair) -> str:
     )
 
 
+def _task_chart(task: str, pairs: list[Pair]) -> str:
+    try:
+        return _figs(figures.cross_model_ece_svg(task, pairs))
+    except (KeyError, TypeError, ValueError, IndexError) as err:
+        return f'<p class="note">Cross-model chart unavailable ({e(type(err).__name__)}).</p>'
+
+
 def _task_section(task: str, pairs: list[Pair]) -> str:
     first = pairs[0]
     return (
         f'<section id="task-{e(task)}" class="task"><h2>{e(task)}</h2>'
         f"<p>{e(first.kind)} task on dataset <b>{e(first.dataset)}</b>, "
         f"{len(pairs)} model(s).</p>"
-        + _figs(figures.cross_model_ece_svg(task, pairs))
+        + _task_chart(task, pairs)
         + "".join(_pair_section(p) for p in pairs)
         + "</section>"
     )

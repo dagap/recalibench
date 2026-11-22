@@ -2,10 +2,14 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
+import pytest
 from typer.testing import CliRunner
 
 from recalibench.cli import app
+from recalibench.models.mock import MockModel
+from recalibench.pipeline import experiments as experiments_stage
 from tests.conftest import TOY_CONF
 
 
@@ -64,3 +68,51 @@ def test_dry_run_estimates_the_variants(tmp_path: Path) -> None:
     _cli(tmp_path, "prepare")
     out = _cli(tmp_path, "experiments", "dry_run=true")
     assert "estimated estimate: $0.0000 for 5 variants" in out
+
+
+def _summaries(root: Path) -> dict[str, object]:
+    exp = root / "artifacts_mock" / "_experiments"
+    out: dict[str, object] = {}
+    for name in ("wording", "option_order", "transfer"):
+        s = json.loads((exp / name / "summary.json").read_text())
+        out[name] = s
+    return out
+
+
+def test_batched_variants_match_unbatched_with_fewer_requests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = {"n": 0, "experiments": 0}
+    fake = MockModel.fake_response
+    init = MockModel.__init__
+    run_experiments = experiments_stage.run_experiments
+
+    def counting(self: MockModel, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        calls["n"] += 1
+        return fake(self, *args, **kwargs)
+
+    def counted_stage(*args: Any, **kwargs: Any) -> Any:
+        before = calls["n"]
+        out = run_experiments(*args, **kwargs)
+        calls["experiments"] = calls["n"] - before
+        return out
+
+    def batching_init(self: MockModel, *args: Any, **kwargs: Any) -> None:
+        init(self, *args, **kwargs)
+        self.batch_questions = True
+
+    monkeypatch.setattr(MockModel, "fake_response", counting)
+    monkeypatch.setattr(experiments_stage, "run_experiments", counted_stage)
+    plain, batched = tmp_path / "plain", tmp_path / "batched"
+    _cli(plain, "run")
+    unbatched_calls = calls["experiments"]
+    monkeypatch.setattr(MockModel, "__init__", batching_init)
+    _cli(batched, "run")
+    batched_calls = calls["experiments"]
+
+    assert _summaries(plain) == _summaries(batched)
+    # toy: 200 items x 3 repeats (mock sends repeats separately). Variant 0 of each
+    # experiment is the task's own question, already cached by the main matrix, so
+    # wording has 2 new phrasings and option_order 1 new order.
+    assert unbatched_calls == 200 * 3 * (2 + 1)
+    assert batched_calls == 200 * 3 * 2  # one request per item, repeat and experiment

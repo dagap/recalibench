@@ -17,7 +17,7 @@ import hashlib
 import json
 import logging
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -179,9 +179,17 @@ def plan_pair(
 
 
 def estimate_and_run(
-    reg: Registry, plans: list[ScorePlan], ctx: RunContext, cfg: DictConfig
+    reg: Registry,
+    plans: list[ScorePlan],
+    ctx: RunContext,
+    cfg: DictConfig,
+    before_run: Callable[[], None] | None = None,
 ) -> list[PairResult]:
-    """Estimate every plan before spending anything, then score them one by one."""
+    """Estimate every plan before spending anything, then score them one by one.
+
+    `before_run` runs after the budget check and before scoring (experiments use it to
+    fill the cache with batched requests, which the per-plan scoring then reads).
+    """
     live = ctx.mode == "live"
     limit = None if cfg.get("limit") is None else int(cfg.limit)
     per_model: dict[str, float] = {}
@@ -208,6 +216,8 @@ def estimate_and_run(
         ]
     if live:
         ctx.budget.check_estimate(total)
+    if before_run is not None:
+        before_run()
     results = [_run_pair(reg, plan, ctx, cfg, limit) for plan in plans]
     for label, usd in sorted(ctx.budget.spent_by_model.items()):
         log.info("spent %s: $%.4f (estimate $%.4f)", label, usd, per_model.get(label, 0.0))

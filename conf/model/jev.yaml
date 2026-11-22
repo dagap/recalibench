@@ -9,7 +9,7 @@ price_per_m_input_tokens: 0.042
 max_attempts: 5            # retries 429, 529, other 5xx, timeouts
 backoff_s: 1.0
 backoff_max_s: 30.0
-batch_questions: false     # all phrasings of an item in one request; pays off (2.5x binary, 1.5x choice) but the pipeline scores one question per call
+batch_questions: true      # experiments: all variants of an item in one request (live: 2.5x fewer tokens binary, 1.5x choice)
 batch_repeats: true        # all repeats in one request: ~2.6x fewer billed tokens, repeats still differ (live, 2026-11-22)
 mock:                      # what mode=mock returns instead of calling the API
   signal: 1.0

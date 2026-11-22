@@ -14,19 +14,21 @@ Variants run through the same score / calibrate / evaluate code as the main matr
 (cache, budget, mock routing, fingerprints), with one shared budget for the stage.
 """
 
+import asyncio
 import json
 import logging
 import pickle
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from recalibench.core.paths import Paths
 from recalibench.core.registry import Registry
-from recalibench.core.types import Question, TaskSpec
+from recalibench.core.types import Item, Prediction, Question, TaskSpec
 from recalibench.evaluate import metrics as m
 from recalibench.models.budget import Budget
 from recalibench.models.context import RunContext
@@ -59,6 +61,28 @@ class _Variant:
     spec: TaskSpec
     model_name: str
     out_dir: Path
+
+
+@runtime_checkable
+class BatchesQuestions(Protocol):
+    """A model that can answer several questions about an item in one request (ApiModel)."""
+
+    batch_questions: bool
+
+    async def predict_questions(
+        self, items: list[Item], questions: Sequence[Question]
+    ) -> list[list[Prediction]]: ...
+
+
+def _prefetch(groups: list[list[ScorePlan]]) -> None:
+    """One batched pass per experiment fills the cache; per-variant scoring then reads it."""
+    for plans in groups:
+        model = plans[0].model
+        if len(plans) < 2 or not isinstance(model, BatchesQuestions) or not model.batch_questions:
+            continue
+        questions = [p.spec.question for p in plans]
+        log.info("%s: %d variants batched per request", plans[0].spec.name, len(questions))
+        asyncio.run(model.predict_questions(plans[0].items, questions))
 
 
 # ---- variant builders ------------------------------------------------------------
@@ -282,6 +306,7 @@ def run_experiments(
     variants = _variants(reg, paths, cfg)
 
     plans: list[ScorePlan] = []
+    groups: dict[tuple[str, str], list[ScorePlan]] = {}  # (experiment, model): its variants
     scored: list[PairResult] = []
     loaded: dict[str, tuple[list[Any], list[str], str]] = {}
     for v in variants:
@@ -295,7 +320,10 @@ def run_experiments(
             scored.append(planned)
         else:
             plans.append(planned)
-    run = estimate_and_run(reg, plans, ctx, cfg)
+            groups.setdefault((v.experiment, v.model_name), []).append(planned)
+    run = estimate_and_run(
+        reg, plans, ctx, cfg, before_run=lambda: _prefetch(list(groups.values()))
+    )
     if cfg.get("dry_run"):
         total = sum(r.estimate_usd for r in run)
         return [ExperimentResult("estimate", "estimated", f"${total:.4f} for {len(run)} variants")]

@@ -1,0 +1,12 @@
+# A text-only choice task on the toy dataset: the binary-only toy model and the
+# structured baseline must both be skipped here, with a logged reason.
+dataset: toy
+question:
+  kind: choice
+  text: "Is this toy item negative or positive?"
+  options:
+    - {key: neg, label: Negative}
+    - {key: pos, label: Positive}
+state: {fields: [text]}
+label: {rule: map_values, column: label, mapping: {"0": neg, "1": pos}}
+sample_size: 200

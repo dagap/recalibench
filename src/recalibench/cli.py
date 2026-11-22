@@ -10,13 +10,17 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from omegaconf import DictConfig
 
 from recalibench.core.config import load_config
 from recalibench.core.paths import Paths
 from recalibench.core.registry import GROUPS, Group, PluginError, Registry
 from recalibench.datasets.manifest import DownloadError
+from recalibench.models.base_api import FatalApiError
+from recalibench.models.budget import BudgetExceeded
 from recalibench.pipeline import download as download_stage
 from recalibench.pipeline import prepare as prepare_stage
+from recalibench.pipeline import score as score_stage
 from recalibench.tasks.builder import BuildError
 
 app = typer.Typer(
@@ -144,10 +148,47 @@ def prepare(
         raise typer.Exit(code=1) from e
 
 
+STAGE_ERRORS = (
+    PluginError,
+    DownloadError,
+    prepare_stage.PrepareError,
+    BuildError,
+    score_stage.ScoreError,
+    BudgetExceeded,
+    FatalApiError,
+)
+
+Force = Annotated[bool, typer.Option("--force", help="Redo work even if up to date.")]
+
+
+def _setup(ctx: typer.Context, overrides: list[str] | None) -> tuple[Registry, Paths, DictConfig]:
+    state: State = ctx.obj
+    cfg = load_config(overrides or [], extra_conf_dirs=state.config_dirs)
+    reg = Registry(extra_conf_dirs=state.config_dirs, overrides=overrides or [])
+    return reg, Paths.from_config(cfg), cfg
+
+
+def _report_scores(results: list[score_stage.PairResult]) -> None:
+    for r in results:
+        if r.status == "estimated":
+            detail = f"estimate ${r.estimate_usd:.4f}"
+        else:
+            detail = r.reason or f"{r.rows} rows, {r.errors} errors, ${r.cost_usd:.4f}"
+        typer.echo(f"  {r.status:<9} {r.task} x {r.model}: {detail}")
+    if any(r.status == "failed" for r in results):
+        raise typer.Exit(code=1)
+
+
 @app.command()
-def score(overrides: Overrides = None) -> None:
-    """Score every task x model (cached, budgeted)."""
-    _not_implemented("score", 5)
+def score(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -> None:
+    """Score every task x model (cached, budgeted). dry_run=true estimates; limit=N smoke-tests."""
+    reg, paths, cfg = _setup(ctx, overrides)
+    try:
+        results = score_stage.score(reg, paths, cfg, force=force)
+    except STAGE_ERRORS as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
+    _report_scores(results)
 
 
 @app.command()
@@ -175,6 +216,14 @@ def report(overrides: Overrides = None) -> None:
 
 
 @app.command()
-def run(overrides: Overrides = None) -> None:
-    """Run the full pipeline end to end."""
-    _not_implemented("run", 5)
+def run(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -> None:
+    """Run the pipeline end to end: download, prepare, score (later phases add their stages)."""
+    reg, paths, cfg = _setup(ctx, overrides)
+    try:
+        download_stage.download(reg, paths, download_stage.datasets_for(reg, cfg))
+        prepare_stage.prepare(reg, paths, cfg, force=force)
+        results = score_stage.score(reg, paths, cfg, force=force)
+    except STAGE_ERRORS as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=2 if isinstance(e, DownloadError) else 1) from e
+    _report_scores(results)

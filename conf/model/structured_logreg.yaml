@@ -1,0 +1,4 @@
+_target_: recalibench.models.tfidf_logreg.TfidfLogReg
+version: struct-lr-1       # bump when features or hyperparameters change
+features: structured       # the state's non-text fields; skipped on text-only tasks
+C: 1.0

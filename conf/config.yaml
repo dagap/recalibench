@@ -4,6 +4,9 @@ seed: 42
 sample_size: 3000          # per task, stratified on label; a task may override
 splits: {fit: 0.6, val: 0.2, test: 0.2}
 budget_usd: 5.0            # hard stop across the whole run, all models
+max_error_rate: 0.02       # a task x model with more failed items than this fails the run
+dry_run: false             # score: print the cost estimate per model and stop
+limit: null                # score: smoke-test N items per task (fills the cache, writes no artifacts)
 ece_bins: 15
 bootstrap_iters: 1000
 mlflow: {enabled: false}

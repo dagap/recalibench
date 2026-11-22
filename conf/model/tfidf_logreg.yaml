@@ -1,0 +1,5 @@
+_target_: recalibench.models.tfidf_logreg.TfidfLogReg
+version: tfidf-lr-1        # bump when features or hyperparameters change
+features: text             # TF-IDF 1-2 grams over the state's text fields
+min_df: 3
+C: 1.0

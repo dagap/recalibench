@@ -216,6 +216,28 @@ class ApiModel:
         """Cost of a live, unbatched run over `items`, ignoring the cache (an upper bound)."""
         return sum(self._single_cost(i, question) for i in items) * self.repeats
 
+    def pending_cost(self, items: list[Item], questions: Sequence[Question]) -> float:
+        """Live cost of the answers not yet in this model's cache (needs bind()).
+
+        Worst case per missing answer, as the budget reserves it. Mock runs read
+        the mock cache, so their pending cost is what a mock re-run would redo.
+        """
+        if self._ctx is None:
+            raise RuntimeError(f"{self.model_id}: call bind(RunContext) before pending_cost()")
+        namespace = self._namespace()
+        cache = ResponseCache(self._ctx.paths.cache_dir(self.name, self.version))
+        try:
+            total = 0.0
+            for item in items:
+                for q in questions:
+                    single = self._single_cost(item, q)
+                    for r in range(self.repeats):
+                        if cache.get(cache_key(item.state, q, r, namespace)) is None:
+                            total += single
+            return total
+        finally:
+            cache.close()
+
     def estimate_cost_questions(self, items: list[Item], questions: Sequence[Question]) -> float:
         """Upper bound for predict_questions(): batching is assumed to save nothing."""
         return sum(self.estimate_cost(items, q) for q in questions)

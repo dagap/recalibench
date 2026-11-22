@@ -15,6 +15,14 @@ import pandas as pd
 
 from recalibench.core.types import Item, Prediction, Question
 
+
+class UnsupportedTask(Exception):
+    """Raised by a plug-in that can't handle this task (e.g. no fields it can use).
+
+    The pipeline logs the reason and skips the task x plug-in pair; it is not an error.
+    """
+
+
 FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
 

@@ -6,7 +6,7 @@ nothing to calibrate), then distorts it by a known amount:
 
   binary  z ~ N(+mu, 1) if y=1 else N(-mu, 1); calibrated logit = 2*mu*z
           (exact Bayes posterior for balanced classes); returned p = sigmoid(slope * logit)
-          slope < 1 -> under-confident (PLAN.md: 0.6)
+          slope < 1 -> under-confident (default config: 0.6)
   choice  s_k = mu*[k == y] + N(0, 1); calibrated probs = softmax(mu * s) (uniform prior);
           returned probs = softmax(mu * s / temperature); temperature < 1 -> over-confident (0.5)
 

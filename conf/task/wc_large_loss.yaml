@@ -1,4 +1,4 @@
-# Leaves out InitialCaseEstimate (the insurer's own estimate); see PLAN.md stretch goals.
+# Leaves out InitialCaseEstimate: the insurer's own estimate would give most of the answer away.
 dataset: workers_comp
 question:
   kind: binary

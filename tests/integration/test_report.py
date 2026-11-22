@@ -63,7 +63,7 @@ def test_report_errors_when_nothing_evaluated(tmp_path: Path) -> None:
 
 
 def test_run_shares_one_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # CLAUDE.md: one Budget per run, shared by all models (score and experiments alike).
+    # One Budget per run, shared by all models (score and experiments alike).
     made: list[Budget] = []
     original = Budget.__post_init__
 

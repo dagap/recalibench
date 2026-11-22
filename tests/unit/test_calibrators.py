@@ -1,4 +1,4 @@
-"""Phase 6 checks on synthetic data with a known miscalibration.
+"""Calibrator checks on synthetic data with a known miscalibration.
 
 Each calibrator is fitted on 5,000 rows and judged on 20,000 fresh rows, and is
 only held to distortions its family can represent (temperature can't undo a bias).

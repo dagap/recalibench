@@ -45,6 +45,7 @@ def test_sections_present(tmp_path: Path) -> None:
     html = _render(_data(tmp_path, exps))
     assert html.startswith("<!doctype html>")
     for sid in (
+        "about",
         "summary",
         "task-t_bin",
         "task-t_cho",
@@ -147,3 +148,9 @@ def test_pair_with_broken_fields_still_renders(tmp_path: Path) -> None:
     section = _section(html, f"pair-{p.task}-{p.model_id}")
     assert "could not be rendered" in section
     assert 'id="pair-t_cho-m@1"' in html  # the other pairs are unaffected
+
+
+def test_transfer_reads_as_prose_not_a_raw_note(tmp_path: Path) -> None:
+    exp = _section(_render(_data(tmp_path, {"transfer": transfer_summary()})), "experiments")
+    assert "deliberately applies" not in exp
+    assert "applied unchanged to" in exp

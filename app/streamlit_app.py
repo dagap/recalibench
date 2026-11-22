@@ -78,6 +78,10 @@ if not modes:
 
 with st.sidebar:
     st.title("recalibench")
+    st.caption(
+        "Does a model's stated confidence match how often it is right? Each task is "
+        "evaluated on held-out test cases, before and after post-hoc calibration."
+    )
     mode: Mode = st.radio(
         "Results",
         modes,

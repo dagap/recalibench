@@ -6,7 +6,7 @@ Rule (recorded in selected.json):
      difference is within one standard error of zero (the "one-SE rule": with
      ~600 val rows, smaller gaps are noise), or within TIE_REL; among tied
      candidates a parametric family beats a non-parametric one (a small split
-     overfits isotonic or histogram binning; PLAN.md risk table);
+     overfits isotonic or histogram binning);
   3. remaining ties go to the lowest val ECE, then to registry order.
 The test split is never passed in here.
 """

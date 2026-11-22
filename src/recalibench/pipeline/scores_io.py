@@ -6,8 +6,8 @@
         task, model_id, kind, keys (column order), fingerprint, rows, errors, spend, ...
 
 Probabilities are clipped to [CLIP, 1 - CLIP] here (and only here); choice rows
-are renormalised afterwards so they still sum to 1. Later phases read scores
-only through `read_scores`.
+are renormalised afterwards so they still sum to 1. Downstream stages read
+scores only through `read_scores`.
 """
 
 import json

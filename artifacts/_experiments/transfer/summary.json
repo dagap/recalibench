@@ -2,37 +2,37 @@
   "from": "osha_amputation",
   "to": "wc_large_loss",
   "model_id": "jev@jev-1.14.0",
-  "transferred_calibrator": "isotonic",
-  "native_calibrator": "beta",
+  "transferred_calibrator": "platt",
+  "native_calibrator": "platt",
   "note": "deliberately applies a calibrator to scores it was not fitted on",
   "raw": {
-    "log_loss": 0.37803891282872426,
-    "brier": 0.1087981111111111,
-    "accuracy": 0.88,
-    "ece": 0.11077777777777777,
-    "ece_equal_mass": 0.10719999999999999,
-    "classwise_ece": 0.1329888888888889,
-    "auroc": 0.6477006172839506,
-    "smooth_ece": 0.13201168883718323
+    "log_loss": 0.37863508666339085,
+    "brier": 0.10892372222222223,
+    "accuracy": 0.8816666666666667,
+    "ece": 0.11735000000000001,
+    "ece_equal_mass": 0.10833888888888887,
+    "classwise_ece": 0.1326944444444445,
+    "auroc": 0.6437345679012346,
+    "smooth_ece": 0.13173612100494608
   },
   "transferred": {
-    "log_loss": 0.3679315181923188,
-    "brier": 0.10466420100570752,
-    "accuracy": 0.87,
-    "ece": 0.05015770106668692,
-    "ece_equal_mass": 0.06233872099238775,
-    "classwise_ece": 0.05634665750032427,
-    "auroc": 0.6287037037037037,
-    "smooth_ece": 0.05489855012569591
+    "log_loss": 0.3257738093785674,
+    "brier": 0.09189736090630453,
+    "accuracy": 0.8933333333333333,
+    "ece": 0.024888067658292923,
+    "ece_equal_mass": 0.03780976828754845,
+    "classwise_ece": 0.03577313380805594,
+    "auroc": 0.64375,
+    "smooth_ece": 0.032809528562758275
   },
   "native": {
-    "log_loss": 0.3157546462579723,
-    "brier": 0.08829123717356353,
+    "log_loss": 0.31691700361206854,
+    "brier": 0.08845874161417268,
     "accuracy": 0.9,
-    "ece": 0.00641047412867212,
-    "ece_equal_mass": 0.04305291780297816,
-    "classwise_ece": 0.006410474128672013,
-    "auroc": 0.6476851851851851,
-    "smooth_ece": 0.019056107040152318
+    "ece": 0.005404376638724626,
+    "ece_equal_mass": 0.03612874320661835,
+    "classwise_ece": 0.005404376638724579,
+    "auroc": 0.6436574074074074,
+    "smooth_ece": 0.01890067577709819
   }
 }

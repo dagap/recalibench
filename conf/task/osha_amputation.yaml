@@ -1,4 +1,4 @@
-# Easy anchor: most amputation narratives say "amputated" (PLAN.md risks).
+# The easy anchor: most amputation narratives say "amputated".
 dataset: osha_sir
 question:
   kind: binary

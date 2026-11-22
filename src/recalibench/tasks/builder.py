@@ -1,6 +1,6 @@
 """Turn a task config plus its dataset into fit/val/test items.
 
-Order of operations (see PLAN.md Phase 3):
+Order of operations:
   sort by id -> build state, drop null/blank -> dedupe identical states ->
   strata from the label rule -> stratified sample -> stratified split ->
   fit the label rule on the fit split only -> label every split -> check -> write.
@@ -22,7 +22,7 @@ from recalibench.tasks.label_rules import make_rule
 from recalibench.tasks.state import StateSpec, build_states
 
 COLUMNS = ["id", "state_json", "label", "split"]
-RATE_TOLERANCE = 0.02  # PLAN.md: per-split label rates within 2 points
+RATE_TOLERANCE = 0.02  # per-split label rates must agree within 2 points
 
 
 class BuildError(Exception):

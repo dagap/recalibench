@@ -132,7 +132,7 @@ def test_calibrator_for_another_model_version_is_refused(tmp_path: Path, key: No
 
 
 def test_calibrator_fitted_on_other_scores_is_refused(tmp_path: Path, key: None) -> None:
-    # CLAUDE.md: never apply a calibrator to scores with a different fingerprint.
+    # Invariant: never apply a calibrator to scores with a different fingerprint.
     _live_artifacts(tmp_path, scores_fp="older-scores")
     with pytest.raises(live.LiveBoxError, match="different scores"):
         live.score_live(tmp_path, TASK, {"narrative": "x"}, Budget(cap_usd=1.0))

@@ -1,7 +1,7 @@
 [project]
 name = "recalibench"
 version = "0.1.0"
-description = "Post-hoc recalibration framework for probabilistic decision models"
+description = "Measure and fix the calibration of probabilistic decision models (LLM APIs included) with post-hoc calibration on a small labelled sample"
 readme = "README.md"
 authors = [
     { name = "Pankaj Daga" }
@@ -47,7 +47,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-extend-exclude = ["*.md"]  # ruff 0.17 formats code blocks in Markdown; keep PLAN.md as written
+extend-exclude = ["*.md"]  # ruff 0.17 formats code blocks in Markdown; keep the docs as written
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

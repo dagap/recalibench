@@ -1,4 +1,4 @@
-"""Phase 4 check: the mock model is miscalibrated by exactly the intended amount."""
+"""The mock model is miscalibrated by exactly the intended amount."""
 
 import numpy as np
 import pytest

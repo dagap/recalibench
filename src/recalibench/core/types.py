@@ -61,7 +61,7 @@ class Prediction:
 
 @dataclass(frozen=True)
 class TaskSpec:
-    """A task config, parsed and validated. Interpreting state/label is Phase 3's job."""
+    """A task config, parsed and validated; tasks/builder.py interprets state and label."""
 
     name: str
     dataset: str

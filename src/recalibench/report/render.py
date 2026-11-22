@@ -266,8 +266,9 @@ def _transfer(s: dict[str, Any]) -> str:
         )
     ]
     return (
-        f"<p>Calibrator fitted on <b>{e(s['from'])}</b> applied to <b>{e(s['to'])}</b> "
-        f"({e(s['model_id'])}). {e(s.get('note', ''))}</p>"
+        f"<p>The calibrator selected for <b>{e(s['from'])}</b> is applied unchanged to "
+        f"<b>{e(s['to'])}</b> ({e(s['model_id'])}) and compared with the calibrator fitted "
+        f"on {e(s['to'])} itself. A large gap means calibration has to be fitted per task.</p>"
         + _table(["test metrics on " + e(s["to"])] + [e(n) for n in METRICS], rows)
     )
 
@@ -340,6 +341,15 @@ def _config(run_config: str) -> str:
     return f'<section id="config"><h2>Run config</h2><pre>{e(run_config)}</pre></section>'
 
 
+INTRO = (
+    "Does each model's stated confidence match how often it is right, and how much does "
+    "post-hoc calibration on a small labelled sample fix it? For every task, the labelled "
+    "cases are split into fit, validation and test sets: each candidate calibrator is "
+    "fitted on the fit set, one is selected on the validation set, and every number in "
+    "this report comes from the held-out test set. Brackets are 95% paired-bootstrap "
+    "confidence intervals over test cases. No model is retrained."
+)
+
 CSS = """
 :root { --bg:#fbfbfa; --fg:#1d1d1f; --muted:#6b6b70; --card:#ffffff; --line:#e3e3e0;
   --accent:#1f5fbf; --flag-bg:#fdf0d5; --flag-fg:#7a4b00; }
@@ -354,6 +364,7 @@ body { margin:0; background:var(--bg); color:var(--fg);
 main { max-width:1180px; margin:0 auto; padding:24px 16px 64px; }
 header h1 { margin:0 0 4px; font-size:28px; letter-spacing:-0.01em; }
 .meta { color:var(--muted); margin:0 0 8px; }
+.intro { max-width:80ch; margin:8px 0 12px; }
 .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px;
   font-weight:600; background:var(--flag-bg); color:var(--flag-fg); }
 .badge.live { background:var(--accent); color:#fff; }
@@ -403,9 +414,10 @@ def render(data: ReportData, run_config: str, generated_at: str) -> str:
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>recalibench report</title><style>{CSS}</style></head><body><main>"
-        f"<header><h1>recalibench report</h1>"
+        f"<header><h1>recalibench: calibration report</h1>"
         f'<p class="meta">{badge} Generated {e(generated_at)} · {len(data.pairs)} task × model '
-        f"pairs · {len(data.tasks)} tasks · {len(data.models)} models</p><nav>{nav}</nav></header>"
+        f"pairs · {len(data.tasks)} tasks · {len(data.models)} models</p>"
+        f'<p class="intro" id="about">{INTRO}</p><nav>{nav}</nav></header>'
         + _summary(data)
         + "".join(_task_section(t, by_task[t]) for t in data.tasks)
         + _experiments(data)

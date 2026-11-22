@@ -1,5 +1,4 @@
-"""A minimal binned ECE for Phase 4's checks. Phase 7's metrics module supersedes it
-and cross-checks against this one."""
+"""A minimal, independent binned ECE: evaluate/metrics.py is cross-checked against it."""
 
 import numpy as np
 import numpy.typing as npt

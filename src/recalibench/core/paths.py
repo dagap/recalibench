@@ -55,12 +55,14 @@ class Paths:
     def cache_dir(self, model: str, version: str) -> Path:
         return self.root / f"cache{self._suffix}" / model_key(model, version)
 
+    def artifacts_root(self) -> Path:
+        return self.root / f"artifacts{self._suffix}"
+
     def artifact_dir(self, task: str, model: str, version: str) -> Path:
-        base = self.root / f"artifacts{self._suffix}"
-        return base / _part(task, "task") / model_key(model, version)
+        return self.artifacts_root() / _part(task, "task") / model_key(model, version)
 
     def experiments_root(self) -> Path:
-        return self.root / f"artifacts{self._suffix}" / "_experiments"
+        return self.artifacts_root() / "_experiments"
 
     def experiment_dir(self, experiment: str, variant: str, model: str, version: str) -> Path:
         base = self.experiments_root() / _part(experiment, "experiment") / _part(variant, "variant")

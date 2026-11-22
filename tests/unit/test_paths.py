@@ -37,3 +37,10 @@ def test_from_config_follows_mode_override() -> None:
     p = Paths.from_config(load_config(["mode=live"]))
     assert p.mode == "live"
     assert p.root.is_absolute()
+
+
+def test_artifacts_root_per_mode(tmp_path: Path) -> None:
+    assert Paths(tmp_path, "mock").artifacts_root() == tmp_path / "artifacts_mock"
+    assert Paths(tmp_path, "live").artifacts_root() == tmp_path / "artifacts"
+    mock = Paths(tmp_path, "mock")
+    assert mock.experiments_root() == tmp_path / "artifacts_mock" / "_experiments"

@@ -107,3 +107,23 @@ def test_cost_per_model(tmp_path: Path) -> None:
     cost = _section(_render(_data(tmp_path)), "cost")
     assert "$0.7500" in cost  # m@1: 0.5 + 0.25 across its two tasks
     assert "120" in cost  # m@1 mean latency over pairs that report one
+
+
+def test_unreachable_target_accuracy_renders_dash(tmp_path: Path) -> None:
+    # No threshold reaches the target on val: evaluate writes accuracy/threshold None.
+    data = _data(tmp_path)
+    sel = data.pairs[0].metrics["selective"]["raw"]
+    sel["tuned"] = {"threshold": None, "coverage": 0.0, "accuracy": None}
+    pair = _section(_render(data), f"pair-{data.pairs[0].task}-{data.pairs[0].model_id}")
+    tuned = re.search(r"<tr><th[^>]*>tuned.*?</tr>", pair)
+    assert tuned is not None and "0% at —" in tuned.group(0)
+
+
+def test_cost_tolerates_null_latency_and_cost(tmp_path: Path) -> None:
+    # Local models write mean_latency_ms (and may write cost_usd) as null.
+    data = _data(tmp_path)
+    for p in data.pairs:
+        p.metrics["mean_latency_ms"] = None
+        p.metrics["cost_usd"] = None
+    cost = _section(_render(data), "cost")
+    assert "$0.0000" in cost and "—" in cost

@@ -30,6 +30,10 @@ def e(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
+def _opt(x: object) -> float | None:
+    return None if x is None else float(str(x))
+
+
 def _num(x: float | None, digits: int = 4) -> str:
     return DASH if x is None else f"{x:.{digits}f}"
 
@@ -71,7 +75,8 @@ def _table(head: list[str], rows: list[list[str]]) -> str:
 
 
 def _figs(*svgs: str) -> str:
-    return '<div class="figs">' + "".join(f"<figure>{s}</figure>" for s in svgs) + "</div>"
+    cls = "figs single" if len(svgs) == 1 else "figs"  # a lone chart must not stretch
+    return f'<div class="{cls}">' + "".join(f"<figure>{s}</figure>" for s in svgs) + "</div>"
 
 
 # ---- summary ---------------------------------------------------------------------------
@@ -132,8 +137,8 @@ def _selective_table(pair: Pair) -> str:
     raw, cal = sel["raw"], sel["calibrated"]
     target = float(raw.get("target_accuracy", 0.95))
 
-    def pct(x: object) -> str:
-        return f"{float(str(x)):.0%}"
+    def pct(x: object) -> str:  # None: no threshold reached the target, or nothing handled
+        return DASH if x is None else f"{float(str(x)):.0%}"
 
     rows = [
         [
@@ -146,7 +151,7 @@ def _selective_table(pair: Pair) -> str:
             f"{pct(raw['trust']['coverage'])} at {pct(raw['trust']['accuracy'])}",
             f"{pct(cal['trust']['coverage'])} at {pct(cal['trust']['accuracy'])}",
         ],
-        ["AURC (lower is better)", _num(float(raw["aurc"])), _num(float(cal["aurc"]))],
+        ["AURC (lower is better)", _num(_opt(raw.get("aurc"))), _num(_opt(cal.get("aurc")))],
     ]
     return _table(["auto-handled share, at accuracy", "raw", "calibrated"], rows)
 
@@ -295,9 +300,8 @@ def _cost(data: ReportData) -> str:
     rows: list[list[str]] = []
     for model in data.models:
         ps = [p for p in data.pairs if p.model_id == model]
-        cost = sum(float(p.metrics.get("cost_usd", 0.0)) for p in ps)
-        lat = [float(p.metrics.get("mean_latency_ms", 0.0)) for p in ps]
-        lat = [x for x in lat if x > 0]
+        cost = sum(_opt(p.metrics.get("cost_usd")) or 0.0 for p in ps)
+        lat = [x for p in ps if (x := _opt(p.metrics.get("mean_latency_ms"))) and x > 0]
         rows.append(
             [
                 e(model),
@@ -354,6 +358,7 @@ tbody th { font-weight:500; }
   border-radius:6px; display:inline-block; }
 .figs { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));
   gap:12px; margin:8px 0 16px; }
+.figs.single { grid-template-columns:minmax(0, 640px); }
 figure { margin:0; background:#fff; border:1px solid var(--line); border-radius:8px;
   padding:8px; }
 figure svg { display:block; width:100%; height:auto; }

@@ -44,3 +44,8 @@ def test_artifacts_root_per_mode(tmp_path: Path) -> None:
     assert Paths(tmp_path, "live").artifacts_root() == tmp_path / "artifacts"
     mock = Paths(tmp_path, "mock")
     assert mock.experiments_root() == tmp_path / "artifacts_mock" / "_experiments"
+
+
+def test_report_file_per_mode(tmp_path: Path) -> None:
+    assert Paths(tmp_path, "mock").report_file() == tmp_path / "reports" / "report_mock.html"
+    assert Paths(tmp_path, "live").report_file() == tmp_path / "reports" / "report.html"

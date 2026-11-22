@@ -184,8 +184,8 @@ def _ci_rows(labels: Sequence[str], raw: Sequence[CI], cal: Sequence[CI], title:
     ax.invert_yaxis()
     ax.set_xlim(left=0)
     ax.set_xlabel("ECE (95% CI)")
-    ax.set_title(title, loc="left")
-    _legend(ax)
+    ax.set_title(title, loc="left", pad=18)
+    ax.legend(frameon=False, loc="lower right", bbox_to_anchor=(1, 1), ncol=2)  # above rows
     return _to_svg(fig)
 
 

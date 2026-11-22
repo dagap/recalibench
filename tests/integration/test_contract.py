@@ -1,6 +1,6 @@
 """Plug-in contract: toy plug-ins defined only under tests/plugins/ run end to end
-through the real CLI, with no change to src/. Grows with each phase (calibrate,
-evaluate and report join later)."""
+through the real CLI, with no change to src/: download, prepare, score, calibrate,
+evaluate and report."""
 
 import json
 from pathlib import Path
@@ -74,6 +74,14 @@ def test_toy_plugins_run_end_to_end_through_the_cli(tmp_path: Path) -> None:
     for task, model in expected:
         met = json.loads((arts / task / model / "metrics.json").read_text())
         assert met["n_test"] == 40 and met["selected"] in met["candidates"]
+
+    # Report: the toy tasks and models get their own sections with no template change.
+    _cli(tmp_path, "report")
+    html = (tmp_path / "reports" / "report_mock.html").read_text()
+    for task in ("toy_binary", "toy_choice"):
+        assert f'id="task-{task}"' in html
+    for task, model in expected:
+        assert f'id="pair-{task}-{model}"' in html
 
     again = _cli(tmp_path, "score")  # a second run re-scores nothing
     assert "  scored " not in again and again.count("  fresh ") == len(expected)

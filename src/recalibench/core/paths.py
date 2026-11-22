@@ -70,3 +70,7 @@ class Paths:
 
     def reports_dir(self) -> Path:
         return self.root / "reports"
+
+    def report_file(self) -> Path:
+        """A mock build never overwrites the live report."""
+        return self.reports_dir() / f"report{self._suffix}.html"

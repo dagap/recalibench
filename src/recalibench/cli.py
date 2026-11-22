@@ -23,7 +23,9 @@ from recalibench.pipeline import download as download_stage
 from recalibench.pipeline import evaluate as evaluate_stage
 from recalibench.pipeline import experiments as experiments_stage
 from recalibench.pipeline import prepare as prepare_stage
+from recalibench.pipeline import report as report_stage
 from recalibench.pipeline import score as score_stage
+from recalibench.report.collect import ReportData, ReportError
 from recalibench.tasks.builder import BuildError
 
 app = typer.Typer(
@@ -59,11 +61,6 @@ Overrides = Annotated[
     list[str] | None,
     typer.Argument(help="Hydra overrides, e.g. experiment=demo mode=mock."),
 ]
-
-
-def _not_implemented(command: str, phase: int) -> None:
-    typer.echo(f"recal {command}: not implemented yet (Phase {phase}).", err=True)
-    raise typer.Exit(code=1)
 
 
 def _describe(reg: Registry, group: Group, name: str) -> str:
@@ -161,6 +158,7 @@ STAGE_ERRORS = (
     FatalApiError,
     evaluate_stage.StaleCalibration,
     experiments_stage.ExperimentError,
+    ReportError,
 )
 
 Force = Annotated[bool, typer.Option("--force", help="Redo work even if up to date.")]
@@ -274,19 +272,37 @@ def experiments(ctx: typer.Context, overrides: Overrides = None, force: Force = 
     except STAGE_ERRORS as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=1) from e
+    _report_experiments(results)
+
+
+def _report_experiments(results: list[experiments_stage.ExperimentResult]) -> None:
     for r in results:
         typer.echo(f"  {r.status:<9} {r.name}: {_headline(r) if r.status == 'done' else r.reason}")
 
 
+def _report_built(path: Path, data: ReportData) -> None:
+    typer.echo(
+        f"  built     {path} ({len(data.pairs)} task x model pairs, "
+        f"{len(data.experiments)} experiments)"
+    )
+
+
 @app.command()
-def report(overrides: Overrides = None) -> None:
-    """Build reports/report.html from artifacts."""
-    _not_implemented("report", 8)
+def report(ctx: typer.Context, overrides: Overrides = None) -> None:
+    """Build reports/report.html (live) or reports/report_mock.html from artifacts."""
+    _, paths, cfg = _setup(ctx, overrides)
+    try:
+        path, data = report_stage.build_report(paths, cfg)
+    except STAGE_ERRORS as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
+    _report_built(path, data)
 
 
 @app.command()
 def run(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -> None:
-    """Run the pipeline end to end: download, prepare, score, calibrate, evaluate."""
+    """Run the pipeline end to end: download, prepare, score, calibrate, evaluate,
+    experiments, report."""
     reg, paths, cfg = _setup(ctx, overrides)
     try:
         download_stage.download(reg, paths, download_stage.datasets_for(reg, cfg))
@@ -296,9 +312,13 @@ def run(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -
             _report_scores(results)
         calibrations = calibrate_stage.calibrate(reg, paths, cfg, force=force)
         evaluations = evaluate_stage.evaluate(reg, paths, cfg, force=force)
+        exp_results = experiments_stage.run_experiments(reg, paths, cfg, force=force)
+        built = report_stage.build_report(paths, cfg)
     except STAGE_ERRORS as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=2 if isinstance(e, DownloadError) else 1) from e
     _report_scores(results)
     _report_calibration(calibrations)
+    _report_experiments(exp_results)
+    _report_built(*built)
     _report_evaluation(evaluations)

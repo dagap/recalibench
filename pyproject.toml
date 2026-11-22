@@ -15,6 +15,7 @@ dependencies = [
     "omegaconf>=2.3.1",
     "pandas>=3.1.1",
     "pyarrow>=26.0.1",
+    "relplot>=1.0.3",
     "scikit-learn>=1.9.1",
     "scipy>=1.18.1",
     "tenacity>=9.2.1",
@@ -35,6 +36,7 @@ dev = [
     "pre-commit>=4.7.0",
     "pyright>=1.1.414",
     "pytest>=9.2.0",
+    "pytest-xdist>=3.8.0",
     "respx>=0.23.1",
     "ruff>=0.17.6",
 ]
@@ -50,7 +52,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]  # so tests.plugins.* (toy plug-ins) import by _target_
-addopts = "-ra"
+addopts = "-ra -n auto"   # pytest-xdist: tests are isolated (tmp_path, no shared state)
 
 [tool.deptry]
 known_first_party = ["recalibench"]  # src/ layout: deptry would otherwise call self-imports transitive

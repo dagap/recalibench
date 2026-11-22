@@ -1,0 +1,8 @@
+# Same labels as toy_binary, text-only state: a second binary task for the transfer experiment.
+dataset: toy
+question:
+  kind: binary
+  text: "Judging only by its text, is this toy item positive?"
+state: {fields: [text]}
+label: {rule: column_gt, column: label, value: 0}
+sample_size: 200

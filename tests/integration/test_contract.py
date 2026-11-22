@@ -68,6 +68,13 @@ def test_toy_plugins_run_end_to_end_through_the_cli(tmp_path: Path) -> None:
         assert sel["selected"] in sel["candidates"]
     assert out.count("  calibrated ") == len(expected)
 
+    # Evaluate: test metrics for every toy pair, through the same CLI.
+    out = _cli(tmp_path, "evaluate", "bootstrap_iters=100")
+    assert out.count("  evaluated ") == len(expected)
+    for task, model in expected:
+        met = json.loads((arts / task / model / "metrics.json").read_text())
+        assert met["n_test"] == 40 and met["selected"] in met["candidates"]
+
     again = _cli(tmp_path, "score")  # a second run re-scores nothing
     assert "  scored " not in again and again.count("  fresh ") == len(expected)
 

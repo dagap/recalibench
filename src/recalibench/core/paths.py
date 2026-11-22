@@ -59,5 +59,12 @@ class Paths:
         base = self.root / f"artifacts{self._suffix}"
         return base / _part(task, "task") / model_key(model, version)
 
+    def experiments_root(self) -> Path:
+        return self.root / f"artifacts{self._suffix}" / "_experiments"
+
+    def experiment_dir(self, experiment: str, variant: str, model: str, version: str) -> Path:
+        base = self.experiments_root() / _part(experiment, "experiment") / _part(variant, "variant")
+        return base / model_key(model, version)
+
     def reports_dir(self) -> Path:
         return self.root / "reports"

@@ -71,3 +71,30 @@ def test_deterministic_and_repeats_differ_slightly() -> None:
 def test_choice_label_must_be_an_option() -> None:
     with pytest.raises(ValueError, match="not an option key"):
         MockGenerator().probs("jev", Item(id="x", state={}, label="zzz"), CHOICE, 0)
+
+
+def test_first_option_bias_follows_whichever_option_is_listed_first() -> None:
+    gen = MockGenerator(first_option_bias=0.8)
+    items = _items(CHOICE, 4000)
+    reordered = Question(kind="choice", text=CHOICE.text, options=CHOICE.options[::-1])
+    for q in (CHOICE, reordered):
+        first = q.keys[0]
+        mean_first = np.mean([gen.probs("jev", it, q, 0)[first] for it in items])
+        true_share = np.mean([it.label == first for it in items])
+        assert mean_first > true_share + 0.05  # over-predicted, whichever option it is
+
+
+def test_reordering_and_rewording_keep_what_the_mock_knows() -> None:
+    gen = MockGenerator(wording_jitter=0.5)
+    item = Item(id="x", state={"t": "hi"}, label="b")
+    reordered = Question(kind="choice", text="Other words?", options=CHOICE.options[::-1])
+    a = dict(zip(CHOICE.keys, gen.calibrated_logits("jev", item, CHOICE), strict=True))
+    b = dict(zip(reordered.keys, gen.calibrated_logits("jev", item, reordered), strict=True))
+    assert a == pytest.approx(b)  # same latent per option key, whatever the order or wording
+
+
+def test_wording_jitter_changes_the_distortion_per_phrasing() -> None:
+    gen = MockGenerator(wording_jitter=0.3)
+    factors = {gen.wording_factor(Question(kind="binary", text=t)) for t in ("A?", "B?", "C?")}
+    assert len(factors) == 3 and all(0.3 < f < 3 for f in factors)
+    assert MockGenerator().wording_factor(BINARY) == 1.0

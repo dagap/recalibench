@@ -1,0 +1,8 @@
+# The demo experiment's shape at toy scale: offline, seconds, no API.
+tasks: [toy_binary, toy_choice, toy_binary_text]
+models: [mock, tfidf_logreg]
+calibrators: auto
+extras:
+  wording:  {task: toy_binary, model: mock, phrasings: 3}
+  option_order: {task: toy_choice, model: mock, orders: 2}
+  transfer: {from: toy_binary, to: toy_binary_text, model: mock}

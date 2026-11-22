@@ -18,8 +18,9 @@ import json
 import logging
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Protocol, cast, runtime_checkable
 
 from omegaconf import DictConfig, OmegaConf
@@ -63,7 +64,9 @@ class PairResult:
 
 
 @dataclass
-class _Plan:
+class ScorePlan:
+    """One task (or task variant) x model to score into `out_dir`."""
+
     spec: TaskSpec
     model_name: str
     model: Model
@@ -71,11 +74,11 @@ class _Plan:
     splits: list[str]
     fingerprint: str
     task_fingerprint: str
+    out_dir: Path
     estimate_usd: float = 0.0
-    result: PairResult = field(init=False)
 
 
-def _load_task(paths: Paths, name: str, limit: int | None) -> tuple[list[Item], list[str], str]:
+def load_task(paths: Paths, name: str, limit: int | None) -> tuple[list[Item], list[str], str]:
     if not paths.processed(name).exists():
         raise ScoreError(f"{name}: not prepared; run `recal prepare` first")
     meta = cast(dict[str, Any], json.loads(paths.processed_meta(name).read_text()))
@@ -94,9 +97,12 @@ def _load_task(paths: Paths, name: str, limit: int | None) -> tuple[list[Item], 
     return items, splits, str(meta["fingerprint"])
 
 
-def _fingerprint(task_fp: str, model_cfg: Any) -> str:
+def _fingerprint(task_fp: str, model_cfg: Any, question: Question) -> str:
+    q = [question.kind, question.text, [[o.key, o.label, o.description] for o in question.options]]
     blob = json.dumps(
-        {"score": SCORE_VERSION, "task": task_fp, "model": model_cfg}, sort_keys=True, default=str
+        {"score": SCORE_VERSION, "task": task_fp, "model": model_cfg, "question": q},
+        sort_keys=True,
+        default=str,
     )
     return hashlib.sha256(blob.encode()).hexdigest()
 
@@ -116,7 +122,7 @@ def _predict(model: Model, items: list[Item], question: Question) -> dict[str, P
 
 
 def _score_trainable(
-    reg: Registry, plan: _Plan, ctx: RunContext, seed: int
+    reg: Registry, plan: ScorePlan, ctx: RunContext, seed: int
 ) -> dict[str, Prediction]:
     q = plan.spec.question
     fit = [it for it, s in zip(plan.items, plan.splits, strict=True) if s == "fit"]
@@ -139,39 +145,45 @@ def _model_label(model: Model) -> str:
     return f"{model.name}@{model.version}"
 
 
-def score(reg: Registry, paths: Paths, cfg: DictConfig, force: bool = False) -> list[PairResult]:
-    live = paths.mode == "live"
+def plan_pair(
+    reg: Registry,
+    ctx: RunContext,
+    cfg: DictConfig,
+    spec: TaskSpec,
+    model_name: str,
+    items: list[Item],
+    splits: list[str],
+    task_fp: str,
+    out_dir: Path | None = None,
+    force: bool = False,
+) -> ScorePlan | PairResult:
+    """A plan to score `spec` with `model_name`, or a PairResult if it is skipped or fresh."""
     limit = None if cfg.get("limit") is None else int(cfg.limit)
-    budget = Budget(cap_usd=float(cfg.budget_usd))
-    ctx = RunContext(paths=paths, budget=budget)
-    results: list[PairResult] = []
-    plans: list[_Plan] = []
+    model = reg.model(model_name)
+    label = _model_label(model)
+    if spec.question.kind not in model.supports:
+        reason = f"{label} supports {sorted(model.supports)}, task is {spec.question.kind}"
+        log.info("skip %s x %s: %s", spec.name, label, reason)
+        return PairResult(spec.name, label, "skipped", reason)
+    if isinstance(model, NeedsContext):
+        model.bind(ctx)
+    model_cfg = OmegaConf.to_container(reg.config("model", model_name), resolve=True)
+    fp = _fingerprint(task_fp, model_cfg, spec.question)
+    out = out_dir or ctx.paths.artifact_dir(spec.name, model.name, model.version)
+    old = scores_io.read_meta(out)
+    fresh = old is not None and old.get("fingerprint") == fp
+    if fresh and old is not None and limit is None and not force and not cfg.get("dry_run"):
+        log.info("%s x %s: up to date, skipped", spec.name, label)
+        return PairResult(spec.name, label, "fresh", rows=int(old["rows"]))
+    return ScorePlan(spec, model_name, model, items, splits, fp, task_fp, out)
 
-    for task in [str(t) for t in cfg.experiment.tasks]:
-        spec = reg.task(task)
-        items, splits, task_fp = _load_task(paths, task, limit)
-        for name in [str(m) for m in cfg.experiment.models]:
-            model = reg.model(name)
-            label = _model_label(model)
-            if spec.question.kind not in model.supports:
-                reason = f"{label} supports {sorted(model.supports)}, task is {spec.question.kind}"
-                log.info("skip %s x %s: %s", task, label, reason)
-                results.append(PairResult(task, label, "skipped", reason))
-                continue
-            if isinstance(model, NeedsContext):
-                model.bind(ctx)
-            model_cfg = OmegaConf.to_container(reg.config("model", name), resolve=True)
-            fp = _fingerprint(task_fp, model_cfg)
-            out = paths.artifact_dir(task, model.name, model.version)
-            old = scores_io.read_meta(out)
-            fresh = old is not None and old.get("fingerprint") == fp
-            if fresh and old is not None and limit is None and not force and not cfg.get("dry_run"):
-                log.info("%s x %s: up to date, skipped", task, label)
-                results.append(PairResult(task, label, "fresh", rows=int(old["rows"])))
-                continue
-            plans.append(_Plan(spec, name, model, items, splits, fp, task_fp))
 
-    # Estimate everything before spending anything.
+def estimate_and_run(
+    reg: Registry, plans: list[ScorePlan], ctx: RunContext, cfg: DictConfig
+) -> list[PairResult]:
+    """Estimate every plan before spending anything, then score them one by one."""
+    live = ctx.mode == "live"
+    limit = None if cfg.get("limit") is None else int(cfg.limit)
     per_model: dict[str, float] = {}
     for plan in plans:
         q = plan.spec.question
@@ -185,27 +197,42 @@ def score(reg: Registry, paths: Paths, cfg: DictConfig, force: bool = False) -> 
     for label, usd in per_model.items():
         log.info("estimate %s: $%.4f%s", label, usd, "" if live else " (if run live)")
     if cfg.get("dry_run"):
-        for plan in plans:
-            label = _model_label(plan.model)
-            results.append(
-                PairResult(plan.spec.name, label, "estimated", estimate_usd=plan.estimate_usd)
-            )
         log.info(
-            "estimate total: $%.4f (budget $%.2f); dry run, nothing scored", total, budget.cap_usd
+            "estimate total: $%.4f (budget $%.2f); dry run, nothing scored",
+            total,
+            ctx.budget.cap_usd,
         )
-        return results
+        return [
+            PairResult(p.spec.name, _model_label(p.model), "estimated", estimate_usd=p.estimate_usd)
+            for p in plans
+        ]
     if live:
-        budget.check_estimate(total)
-
-    for plan in plans:
-        results.append(_run_pair(reg, plan, ctx, cfg, limit))
-    for label, usd in sorted(budget.spent_by_model.items()):
+        ctx.budget.check_estimate(total)
+    results = [_run_pair(reg, plan, ctx, cfg, limit) for plan in plans]
+    for label, usd in sorted(ctx.budget.spent_by_model.items()):
         log.info("spent %s: $%.4f (estimate $%.4f)", label, usd, per_model.get(label, 0.0))
     return results
 
 
+def score(reg: Registry, paths: Paths, cfg: DictConfig, force: bool = False) -> list[PairResult]:
+    limit = None if cfg.get("limit") is None else int(cfg.limit)
+    ctx = RunContext(paths=paths, budget=Budget(cap_usd=float(cfg.budget_usd)))
+    results: list[PairResult] = []
+    plans: list[ScorePlan] = []
+    for task in [str(t) for t in cfg.experiment.tasks]:
+        spec = reg.task(task)
+        items, splits, task_fp = load_task(paths, task, limit)
+        for name in [str(m) for m in cfg.experiment.models]:
+            planned = plan_pair(reg, ctx, cfg, spec, name, items, splits, task_fp, force=force)
+            if isinstance(planned, PairResult):
+                results.append(planned)
+            else:
+                plans.append(planned)
+    return results + estimate_and_run(reg, plans, ctx, cfg)
+
+
 def _run_pair(
-    reg: Registry, plan: _Plan, ctx: RunContext, cfg: DictConfig, limit: int | None
+    reg: Registry, plan: ScorePlan, ctx: RunContext, cfg: DictConfig, limit: int | None
 ) -> PairResult:
     task, label, q = plan.spec.name, _model_label(plan.model), plan.spec.question
     spent_before = ctx.budget.spent_by_model.get(label, 0.0)
@@ -271,7 +298,7 @@ def _run_pair(
         "mean_latency_ms": None if latency.empty else float(latency.mean()),
         "written_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
-    out = ctx.paths.artifact_dir(task, plan.model.name, plan.model.version)
+    out = plan.out_dir
     scores_io.write_scores(out, frame, meta)
     log.info(
         "%s x %s: %d rows, %d errors, $%.4f -> %s",

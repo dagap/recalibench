@@ -7,3 +7,5 @@ mock:
   binary_slope: 0.6        # under-confident on yes/no
   choice_temperature: 0.5  # over-confident on choice
   noise_sd: 0.1
+  wording_jitter: 0.3       # simulates: Jev answers the question as written
+  first_option_bias: 0.5    # simulates: Jev leans toward the option listed first (TypeSafe docs)

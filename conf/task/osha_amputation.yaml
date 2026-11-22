@@ -6,3 +6,10 @@ question:
 state:
   fields: {narrative: Final Narrative}     # never NatureTitle / Nature / Amputation: they leak the label
 label: {rule: column_gt, column: Amputation, value: 0}
+# Alternative wordings for the wording experiment (experiment.extras.wording). Same meaning,
+# different emphasis: a lay version, and one that spells out OSHA's own definition
+# (29 CFR 1904.39(b)(11): traumatic loss of all or part of an external body part,
+# including fingertips, even if later reattached).
+phrasings:
+  - "Did the worker lose all or part of a body part, such as a finger or fingertip, in this incident?"
+  - "OSHA counts as an amputation the traumatic loss of all or part of an external body part, including fingertip amputations, even if the part is later reattached. By that definition, did this incident involve an amputation?"

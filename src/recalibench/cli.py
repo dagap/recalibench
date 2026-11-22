@@ -20,6 +20,8 @@ from recalibench.models.base_api import FatalApiError
 from recalibench.models.budget import BudgetExceeded
 from recalibench.pipeline import calibrate as calibrate_stage
 from recalibench.pipeline import download as download_stage
+from recalibench.pipeline import evaluate as evaluate_stage
+from recalibench.pipeline import experiments as experiments_stage
 from recalibench.pipeline import prepare as prepare_stage
 from recalibench.pipeline import score as score_stage
 from recalibench.tasks.builder import BuildError
@@ -157,6 +159,8 @@ STAGE_ERRORS = (
     score_stage.ScoreError,
     BudgetExceeded,
     FatalApiError,
+    evaluate_stage.StaleCalibration,
+    experiments_stage.ExperimentError,
 )
 
 Force = Annotated[bool, typer.Option("--force", help="Redo work even if up to date.")]
@@ -218,16 +222,60 @@ def calibrate(ctx: typer.Context, overrides: Overrides = None, force: Force = Fa
     _report_calibration(results)
 
 
-@app.command()
-def evaluate(overrides: Overrides = None) -> None:
-    """Compute test metrics with bootstrap CIs."""
-    _not_implemented("evaluate", 7)
+def _report_evaluation(results: list[evaluate_stage.EvalResult]) -> None:
+    for r in results:
+        if r.status == "evaluated":
+            detail = f"test ECE {r.raw_ece:.4f} -> {r.selected_ece:.4f} ({r.selected})"
+        else:
+            detail = r.reason or f"selected {r.selected}"
+        typer.echo(f"  {r.status:<10} {r.task} x {r.model}: {detail}")
+    if any(r.status == "failed" for r in results):
+        raise typer.Exit(code=1)
 
 
 @app.command()
-def experiments(overrides: Overrides = None) -> None:
-    """Run the wording, transfer and cross-model experiments."""
-    _not_implemented("experiments", 7)
+def evaluate(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -> None:
+    """Test-split metrics with paired-bootstrap CIs, selective prediction -> metrics.json."""
+    reg, paths, cfg = _setup(ctx, overrides)
+    try:
+        results = evaluate_stage.evaluate(reg, paths, cfg, force=force)
+    except STAGE_ERRORS as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
+    _report_evaluation(results)
+
+
+def _headline(r: experiments_stage.ExperimentResult) -> str:
+    s = r.summary
+    if r.name == "wording":
+        raw, cal = s["raw_ece_spread"], s["calibrated_ece_spread"]
+        return f"raw ECE spread across phrasings {raw:.4f} -> calibrated {cal:.4f}"
+    if r.name == "option_order":
+        return (
+            f"mean-probability instability {s['raw_mean_prob_instability']:.4f} -> "
+            f"{s['calibrated_mean_prob_instability']:.4f}"
+        )
+    if r.name == "transfer":
+        return (
+            f"{s['from']} -> {s['to']}: ECE raw {s['raw']['ece']:.4f}, transferred "
+            f"{s['transferred']['ece']:.4f}, native {s['native']['ece']:.4f}"
+        )
+    if r.name == "cross_model":
+        return f"{sum(len(v) for v in s['tasks'].values())} task x model rows"
+    return r.reason
+
+
+@app.command()
+def experiments(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -> None:
+    """Run the wording, option-order, transfer and cross-model experiments (experiment.extras)."""
+    reg, paths, cfg = _setup(ctx, overrides)
+    try:
+        results = experiments_stage.run_experiments(reg, paths, cfg, force=force)
+    except STAGE_ERRORS as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
+    for r in results:
+        typer.echo(f"  {r.status:<9} {r.name}: {_headline(r) if r.status == 'done' else r.reason}")
 
 
 @app.command()
@@ -238,7 +286,7 @@ def report(overrides: Overrides = None) -> None:
 
 @app.command()
 def run(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -> None:
-    """Run the pipeline end to end: download, prepare, score, calibrate (more stages later)."""
+    """Run the pipeline end to end: download, prepare, score, calibrate, evaluate."""
     reg, paths, cfg = _setup(ctx, overrides)
     try:
         download_stage.download(reg, paths, download_stage.datasets_for(reg, cfg))
@@ -247,8 +295,10 @@ def run(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -
         if any(r.status == "failed" for r in results):
             _report_scores(results)
         calibrations = calibrate_stage.calibrate(reg, paths, cfg, force=force)
+        evaluations = evaluate_stage.evaluate(reg, paths, cfg, force=force)
     except STAGE_ERRORS as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=2 if isinstance(e, DownloadError) else 1) from e
     _report_scores(results)
     _report_calibration(calibrations)
+    _report_evaluation(evaluations)

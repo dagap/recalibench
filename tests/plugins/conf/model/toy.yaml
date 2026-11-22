@@ -1,0 +1,3 @@
+_target_: tests.plugins.toy_model.ToyModel
+version: "0.1"
+sharpness: 2.5            # > 1 makes the model over-confident on purpose

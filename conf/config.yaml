@@ -7,3 +7,4 @@ budget_usd: 5.0            # hard stop across the whole run, all models
 ece_bins: 15
 bootstrap_iters: 1000
 mlflow: {enabled: false}
+paths: {root: .}          # data/, cache*/, artifacts*/, reports/ live under here

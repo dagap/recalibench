@@ -1,7 +1,7 @@
 .env
 .env.local
 data/
-cache/
+cache*/
 artifacts*/
 reports/
 mlruns/

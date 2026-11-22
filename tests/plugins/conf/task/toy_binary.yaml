@@ -1,0 +1,7 @@
+dataset: toy
+question:
+  kind: binary
+  text: "Is this toy item positive?"
+state: {fields: [text, signal]}
+label: {rule: column_gt, column: label, value: 0}
+sample_size: 200

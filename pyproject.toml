@@ -9,7 +9,9 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "hydra-core>=1.3.8",
+    "numpy>=2.5.5",
     "omegaconf>=2.3.1",
+    "pandas>=3.1.1",
     "typer>=0.29.2",
 ]
 
@@ -23,6 +25,7 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "deptry>=0.25.1",
+    "pandas-stubs>=3.1.0.261029",
     "pre-commit>=4.7.0",
     "pyright>=1.1.414",
     "pytest>=9.2.0",
@@ -39,4 +42,8 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # so tests.plugins.* (toy plug-ins) import by _target_
 addopts = "-ra"
+
+[tool.deptry]
+known_first_party = ["recalibench"]  # src/ layout: deptry would otherwise call self-imports transitive

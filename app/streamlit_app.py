@@ -13,8 +13,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from recalibench.app import data
+from recalibench.app import data, live
 from recalibench.core.paths import Mode, Paths
+from recalibench.models.budget import Budget, BudgetExceeded
 from recalibench.report.collect import Pair, ReportData, ci
 
 RAW, CAL = "#b5655f", "#1f5fbf"
@@ -297,3 +298,54 @@ with examples:
                 }
             )
         st.dataframe(pd.DataFrame(per_model), hide_index=True)  # pyright: ignore[reportUnknownMemberType]
+
+    # ---- live box: one typed case, scored by the real model, then calibrated ----
+    st.divider()
+    st.subheader("Try a case live")
+    reason = live.unavailable(ROOT, task)
+    if reason:
+        st.info(reason)
+    else:
+        if "live_budget" not in st.session_state:
+            st.session_state["live_budget"] = Budget(cap_usd=live.LIVE_BOX_CAP_USD)
+        budget: Budget = st.session_state["live_budget"]
+        st.caption(
+            f"Sends the text below to {live.LIVE_MODEL} (a real, paid call; the true label is "
+            f"never sent) and applies the live run's calibrator. Session cap "
+            f"${live.LIVE_BOX_CAP_USD:.2f}, spent so far ${budget.spent_usd:.4f}."
+        )
+        with st.form("live_form"):
+            fields = live.state_fields(task)
+            state = {f: st.text_area(f, key=f"live_{f}") for f in fields}
+            submitted = st.form_submit_button("Score this case", key="live_submit")
+        if submitted:
+            if not any(v.strip() for v in state.values()):
+                st.warning("Type a case first.")
+            else:
+                try:
+                    with st.spinner("Asking the model..."):
+                        res = live.score_live(ROOT, task, state, budget)
+                except (live.LiveBoxError, BudgetExceeded) as err:
+                    st.error(str(err))
+                else:
+                    th = float(st.session_state.get("threshold", 0.95))
+                    out: list[dict[str, Any]] = []
+                    for label, probs in (
+                        ("raw", res.raw),
+                        (f"calibrated ({res.selected})", res.calibrated),
+                    ):
+                        top = max(probs, key=lambda k: probs[k])
+                        out.append(
+                            {
+                                "": label,
+                                **{k: f"{v:.0%}" for k, v in probs.items()},
+                                f"decision at {th:.2f}": (
+                                    f"auto: {top}" if probs[top] >= th else "send to review"
+                                ),
+                            }
+                        )
+                    st.dataframe(pd.DataFrame(out), hide_index=True)  # pyright: ignore[reportUnknownMemberType]
+                    st.caption(
+                        f"{res.model_id} · cost ${res.cost_usd:.5f}"
+                        + (" (cached answer, free)" if res.cost_usd == 0 else "")
+                    )

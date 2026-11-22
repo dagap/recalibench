@@ -84,3 +84,18 @@ def test_no_artifacts_shows_how_to_build_them(
     at.run()
     assert not at.exception
     assert any("make all" in e.value for e in at.error)
+
+
+def test_live_box_hidden_without_key(app: AppTest) -> None:
+    assert "live_submit" not in [b.key for b in app.button]
+    assert any("TYPESAFE_API_KEY" in i.value for i in app.info)
+
+
+def test_live_box_needs_a_live_run(toy_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RECAL_ROOT", str(toy_root))
+    monkeypatch.setenv("TYPESAFE_API_KEY", "sk-test")  # never used: no live artifacts
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.run()
+    assert not at.exception
+    assert "live_submit" not in [b.key for b in at.button]
+    assert any("live run" in i.value for i in at.info)

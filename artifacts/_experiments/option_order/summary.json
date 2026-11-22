@@ -1,0 +1,69 @@
+{
+  "variants": [
+    {
+      "variant": "order_0",
+      "order": [
+        "violence",
+        "transportation",
+        "fire_explosion",
+        "fall",
+        "exposure",
+        "contact",
+        "overexertion"
+      ],
+      "first_option": "violence",
+      "first_option_true_share": 0.021775544388609715,
+      "selected": "dirichlet",
+      "raw_first_option_mean_prob": 0.019314112229035528,
+      "raw_first_option_predicted_share": 0.021775544388609715,
+      "raw_classwise_ece": 0.025062300364452218,
+      "calibrated_first_option_mean_prob": 0.01800793386373325,
+      "calibrated_first_option_predicted_share": 0.018425460636515914,
+      "calibrated_classwise_ece": 0.013846500110761032
+    },
+    {
+      "variant": "order_1",
+      "order": [
+        "transportation",
+        "exposure",
+        "fall",
+        "violence",
+        "contact",
+        "fire_explosion",
+        "overexertion"
+      ],
+      "first_option": "transportation",
+      "first_option_true_share": 0.08877721943048576,
+      "selected": "dirichlet",
+      "raw_first_option_mean_prob": 0.033133060320202704,
+      "raw_first_option_predicted_share": 0.02680067001675042,
+      "raw_classwise_ece": 0.02554594266668826,
+      "calibrated_first_option_mean_prob": 0.08566940866382791,
+      "calibrated_first_option_predicted_share": 0.08207705192629816,
+      "calibrated_classwise_ece": 0.012259583671020768
+    },
+    {
+      "variant": "order_2",
+      "order": [
+        "fire_explosion",
+        "violence",
+        "fall",
+        "overexertion",
+        "transportation",
+        "contact",
+        "exposure"
+      ],
+      "first_option": "fire_explosion",
+      "first_option_true_share": 0.01675041876046901,
+      "selected": "dirichlet",
+      "raw_first_option_mean_prob": 0.02215606862226436,
+      "raw_first_option_predicted_share": 0.02512562814070352,
+      "raw_classwise_ece": 0.02239660909372036,
+      "calibrated_first_option_mean_prob": 0.020946678885195504,
+      "calibrated_first_option_predicted_share": 0.021775544388609715,
+      "calibrated_classwise_ece": 0.013110538885554992
+    }
+  ],
+  "raw_mean_prob_instability": 0.008084803903161242,
+  "calibrated_mean_prob_instability": 0.0025162981800310735
+}

@@ -1,0 +1,38 @@
+{
+  "from": "osha_amputation",
+  "to": "wc_large_loss",
+  "model_id": "jev@jev-1.14.0",
+  "transferred_calibrator": "isotonic",
+  "native_calibrator": "beta",
+  "note": "deliberately applies a calibrator to scores it was not fitted on",
+  "raw": {
+    "log_loss": 0.37803891282872426,
+    "brier": 0.1087981111111111,
+    "accuracy": 0.88,
+    "ece": 0.11077777777777777,
+    "ece_equal_mass": 0.10719999999999999,
+    "classwise_ece": 0.1329888888888889,
+    "auroc": 0.6477006172839506,
+    "smooth_ece": 0.13201168883718323
+  },
+  "transferred": {
+    "log_loss": 0.3679315181923188,
+    "brier": 0.10466420100570752,
+    "accuracy": 0.87,
+    "ece": 0.05015770106668692,
+    "ece_equal_mass": 0.06233872099238775,
+    "classwise_ece": 0.05634665750032427,
+    "auroc": 0.6287037037037037,
+    "smooth_ece": 0.05489855012569591
+  },
+  "native": {
+    "log_loss": 0.3157546462579723,
+    "brier": 0.08829123717356353,
+    "accuracy": 0.9,
+    "ece": 0.00641047412867212,
+    "ece_equal_mass": 0.04305291780297816,
+    "classwise_ece": 0.006410474128672013,
+    "auroc": 0.6476851851851851,
+    "smooth_ece": 0.019056107040152318
+  }
+}

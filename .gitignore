@@ -2,8 +2,15 @@
 .env.local
 data/
 cache*/
-artifacts*/
-reports/
+# Artifacts: never scores, calibrators or case text. Live results are committed as
+# metrics.json + experiment summary.json only (PLAN.md Phase 9), plus the live report.
+artifacts_mock/
+artifacts/**
+!artifacts/**/
+!artifacts/**/metrics.json
+!artifacts/_experiments/*/summary.json
+reports/*
+!reports/report.html
 mlruns/
 outputs/
 .venv/

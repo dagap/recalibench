@@ -1,0 +1,81 @@
+{
+  "variants": [
+    {
+      "variant": "phrasing_0",
+      "question": "Did this incident result in an amputation?",
+      "selected": "isotonic",
+      "raw_ece": {
+        "value": 0.0336388888888888,
+        "low": 0.026464305555555612,
+        "high": 0.0411779166666666
+      },
+      "calibrated_ece": {
+        "value": 0.005552372067695356,
+        "low": 0.0017539806596236567,
+        "high": 0.013864817132516425
+      },
+      "raw_log_loss": {
+        "value": 0.0644858402474656,
+        "low": 0.04739013346029004,
+        "high": 0.08626667965156459
+      },
+      "calibrated_log_loss": {
+        "value": 0.04367131836439741,
+        "low": 0.015696168886903956,
+        "high": 0.07917938894447359
+      }
+    },
+    {
+      "variant": "phrasing_1",
+      "question": "Did the worker lose all or part of a body part, such as a finger or fingertip, in this incident?",
+      "selected": "beta",
+      "raw_ece": {
+        "value": 0.047644444444444406,
+        "low": 0.038136527777777846,
+        "high": 0.05961180555555553
+      },
+      "calibrated_ece": {
+        "value": 0.005531640317506742,
+        "low": 0.00319563740460052,
+        "high": 0.014845187768707087
+      },
+      "raw_log_loss": {
+        "value": 0.11297245238041156,
+        "low": 0.08854510451734864,
+        "high": 0.14100586960186165
+      },
+      "calibrated_log_loss": {
+        "value": 0.0438661429840853,
+        "low": 0.01955506841021093,
+        "high": 0.07535500508218143
+      }
+    },
+    {
+      "variant": "phrasing_2",
+      "question": "OSHA counts as an amputation the traumatic loss of all or part of an external body part, including fingertip amputations, even if the part is later reattached. By that definition, did this incident involve an amputation?",
+      "selected": "platt",
+      "raw_ece": {
+        "value": 0.046661111111111056,
+        "low": 0.040003749999999894,
+        "high": 0.05719819444444442
+      },
+      "calibrated_ece": {
+        "value": 0.007771977603537975,
+        "low": 0.003934849742177819,
+        "high": 0.016477732333340555
+      },
+      "raw_log_loss": {
+        "value": 0.08703283133908973,
+        "low": 0.06865769844990477,
+        "high": 0.11137717523005242
+      },
+      "calibrated_log_loss": {
+        "value": 0.04441827991141394,
+        "low": 0.018907122713992395,
+        "high": 0.07658377974810425
+      }
+    }
+  ],
+  "raw_ece_spread": 0.014005555555555604,
+  "calibrated_ece_spread": 0.002240337286031233
+}

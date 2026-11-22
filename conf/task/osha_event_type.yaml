@@ -1,0 +1,20 @@
+# OIICS v2.01 event/exposure divisions (first digit of the Event code); 9 = nonclassifiable, dropped.
+dataset: osha_sir
+question:
+  kind: choice
+  text: "Which type of event or exposure caused this injury?"
+  options:
+    - {key: violence, label: "Violence and other injuries by persons or animals", description: "Assaults, kicks, bites and other harm caused by a person or an animal."}
+    - {key: transportation, label: "Transportation incidents", description: "Incidents involving a vehicle or mobile equipment in transit, including pedestrians struck by vehicles."}
+    - {key: fire_explosion, label: "Fires and explosions", description: "Fires, ignition of vapors and explosions, including pressure vessels and tires."}
+    - {key: fall, label: "Falls, slips, trips", description: "Falls to a lower level or on the same level, and slips or trips without a fall."}
+    - {key: exposure, label: "Exposure to harmful substances or environments", description: "Electricity, extreme heat or cold, chemicals, noise, radiation, oxygen deficiency."}
+    - {key: contact, label: "Contact with objects and equipment", description: "Struck by or against objects, caught in or compressed by machinery or shifting objects."}
+    - {key: overexertion, label: "Overexertion and bodily reaction", description: "Lifting, pushing, repetitive motion, bending or reaching, without being struck."}
+state:
+  fields: {narrative: Final Narrative}     # never EventTitle / Event: they are the label
+label:
+  rule: code_prefix
+  column: Event
+  digits: 1
+  mapping: {"1": violence, "2": transportation, "3": fire_explosion, "4": fall, "5": exposure, "6": contact, "7": overexertion}

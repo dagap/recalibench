@@ -16,6 +16,8 @@ from recalibench.core.paths import Paths
 from recalibench.core.registry import GROUPS, Group, PluginError, Registry
 from recalibench.datasets.manifest import DownloadError
 from recalibench.pipeline import download as download_stage
+from recalibench.pipeline import prepare as prepare_stage
+from recalibench.tasks.builder import BuildError
 
 app = typer.Typer(
     name="recal",
@@ -111,7 +113,9 @@ def download(
     try:
         names = download_stage.datasets_for(reg, cfg, dataset or [])
     except PluginError as e:
-        typer.echo(f"{e}\nTask configs arrive in Phase 3; until then use --dataset NAME.", err=True)
+        typer.echo(
+            f"{e}\nFix the experiment's tasks, or pick datasets with --dataset NAME.", err=True
+        )
         raise typer.Exit(code=1) from e
     try:
         download_stage.download(reg, Paths.from_config(cfg), names)
@@ -124,9 +128,20 @@ def download(
 
 
 @app.command()
-def prepare(overrides: Overrides = None) -> None:
-    """Build items and fit/val/test splits for each task."""
-    _not_implemented("prepare", 3)
+def prepare(
+    ctx: typer.Context,
+    overrides: Overrides = None,
+    force: Annotated[bool, typer.Option("--force", help="Rebuild even if up to date.")] = False,
+) -> None:
+    """Build items and fit/val/test splits for each of the experiment's tasks."""
+    state: State = ctx.obj
+    cfg = load_config(overrides or [], extra_conf_dirs=state.config_dirs)
+    reg = Registry(extra_conf_dirs=state.config_dirs, overrides=overrides or [])
+    try:
+        prepare_stage.prepare(reg, Paths.from_config(cfg), cfg, force=force)
+    except (PluginError, prepare_stage.PrepareError, BuildError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()

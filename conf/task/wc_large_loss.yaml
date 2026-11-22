@@ -1,0 +1,11 @@
+# Leaves out InitialCaseEstimate (the insurer's own estimate); see PLAN.md stretch goals.
+dataset: workers_comp
+question:
+  kind: binary
+  text: "Will this workers' compensation claim become a large loss, i.e. among the most expensive 10% of claims?"
+state:
+  fields: [ClaimDescription, Age, Gender, WeeklyPay, HoursWorkedPerWeek, PartTimeFullTime]
+  values:                                  # raw codes are ambiguous to a language model (F = female / full-time)
+    Gender: {M: male, F: female}
+    PartTimeFullTime: {F: full-time, P: part-time}
+label: {rule: quantile_gt, column: UltimateIncurredClaimCost, q: 0.9}   # threshold fitted on the fit split only

@@ -32,6 +32,8 @@ def test_default_selection_follows_experiment_tasks(tmp_path: Path) -> None:
 
 
 def test_unknown_task_hints_dataset_flag(tmp_path: Path) -> None:
-    result = CliRunner().invoke(app, ["download", f"paths.root={tmp_path}"])
+    result = CliRunner().invoke(
+        app, ["download", f"paths.root={tmp_path}", "experiment.tasks=[no_such_task]"]
+    )
     assert result.exit_code == 1
     assert "--dataset" in result.output

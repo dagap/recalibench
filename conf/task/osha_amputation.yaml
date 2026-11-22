@@ -1,0 +1,8 @@
+# Easy anchor: most amputation narratives say "amputated" (PLAN.md risks).
+dataset: osha_sir
+question:
+  kind: binary
+  text: "Did this incident result in an amputation?"
+state:
+  fields: {narrative: Final Narrative}     # never NatureTitle / Nature / Amputation: they leak the label
+label: {rule: column_gt, column: Amputation, value: 0}

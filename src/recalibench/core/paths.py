@@ -49,6 +49,9 @@ class Paths:
     def processed(self, task: str) -> Path:
         return self.root / "data" / "processed" / f"{_part(task, 'task')}.parquet"
 
+    def processed_meta(self, task: str) -> Path:
+        return self.root / "data" / "processed" / f"{_part(task, 'task')}.meta.json"
+
     def cache_dir(self, model: str, version: str) -> Path:
         return self.root / f"cache{self._suffix}" / model_key(model, version)
 

@@ -21,7 +21,7 @@ calibrate:   ; $(RUN) calibrate $(ARGS)
 evaluate:    ; $(RUN) evaluate $(ARGS)
 experiments: ; $(RUN) experiments $(ARGS)
 report:      ; $(RUN) report $(ARGS)
-demo:        ; uv run streamlit run app/streamlit_app.py
+demo:        ; uv run $(if $(wildcard .env),--env-file .env) streamlit run app/streamlit_app.py
 
 test:  ; uv run pytest -q
 lint:  ; uv run ruff check . && uv run pyright && uv run deptry .

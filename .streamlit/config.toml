@@ -1,0 +1,10 @@
+# `make demo`: local only. The app shows case text from data/processed; don't serve it on the LAN.
+[server]
+address = "127.0.0.1"
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"   # no "Deploy" button

@@ -1,8 +1,15 @@
 {
-  "include": ["src", "tests"],
-  "exclude": [".venv", "**/__pycache__"],
+  "include": [
+    "src",
+    "tests"
+  ],
+  "exclude": [
+    ".venv",
+    "**/__pycache__"
+  ],
   "pythonVersion": "3.13",
   "venvPath": ".",
   "venv": ".venv",
-  "typeCheckingMode": "strict"
+  "typeCheckingMode": "strict",
+  "reportConstantRedefinition": false
 }

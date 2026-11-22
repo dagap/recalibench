@@ -4,3 +4,4 @@ calibrators: auto          # every calibrator compatible with the task
 extras:
   wording:  {task: osha_amputation, model: jev, phrasings: 3}
   transfer: {from: osha_amputation, to: wc_large_loss, model: jev}
+  option_order: {task: osha_event_type, model: jev, orders: 3}   # Jev favours the first option (TypeSafe docs)

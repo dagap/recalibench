@@ -2,6 +2,7 @@
 through the real CLI, with no change to src/. Grows with each phase (calibrate,
 evaluate and report join later)."""
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -57,6 +58,15 @@ def test_toy_plugins_run_end_to_end_through_the_cli(tmp_path: Path) -> None:
     s = read_scores(arts / "toy_binary" / "structured_logreg@struct-lr-1")
     assert _auroc(s.probs()[:, 0], s.labels().to_numpy()) > 0.8  # the toy signal is learnable
     assert s.meta["out_of_fold"] is True
+
+    # Calibrate: the toy calibrator, defined only in tests/plugins/, joins selection.
+    out = _cli(tmp_path, "calibrate")
+    for task, model in expected:
+        sel = json.loads((arts / task / model / "selected.json").read_text())
+        assert "toy_identity" in sel["candidates"], (task, model)
+        assert "error" not in sel["candidates"]["toy_identity"]
+        assert sel["selected"] in sel["candidates"]
+    assert out.count("  calibrated ") == len(expected)
 
     again = _cli(tmp_path, "score")  # a second run re-scores nothing
     assert "  scored " not in again and again.count("  fresh ") == len(expected)

@@ -1,0 +1,2 @@
+_target_: recalibench.calibrators.multiclass.VectorScaling
+l2: 1.0e-4

@@ -1,0 +1,3 @@
+_target_: recalibench.calibrators.binary.Histogram      # non-parametric
+n_bins: 15
+prior_strength: 2.0

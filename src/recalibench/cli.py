@@ -18,6 +18,7 @@ from recalibench.core.registry import GROUPS, Group, PluginError, Registry
 from recalibench.datasets.manifest import DownloadError
 from recalibench.models.base_api import FatalApiError
 from recalibench.models.budget import BudgetExceeded
+from recalibench.pipeline import calibrate as calibrate_stage
 from recalibench.pipeline import download as download_stage
 from recalibench.pipeline import prepare as prepare_stage
 from recalibench.pipeline import score as score_stage
@@ -191,10 +192,30 @@ def score(ctx: typer.Context, overrides: Overrides = None, force: Force = False)
     _report_scores(results)
 
 
+def _report_calibration(results: list[calibrate_stage.CalibrationResult]) -> None:
+    for r in results:
+        if r.status == "calibrated":
+            detail = (
+                f"selected {r.selected} (val log loss "
+                f"{r.raw_val_log_loss:.4f} -> {r.selected_val_log_loss:.4f})"
+            )
+        else:
+            detail = r.reason or f"selected {r.selected}"
+        typer.echo(f"  {r.status:<10} {r.task} x {r.model}: {detail}")
+    if any(r.status == "failed" for r in results):
+        raise typer.Exit(code=1)
+
+
 @app.command()
-def calibrate(overrides: Overrides = None) -> None:
-    """Fit calibrators on the fit split and select on val."""
-    _not_implemented("calibrate", 6)
+def calibrate(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -> None:
+    """Fit every compatible calibrator on the fit split and select one on val."""
+    reg, paths, cfg = _setup(ctx, overrides)
+    try:
+        results = calibrate_stage.calibrate(reg, paths, cfg, force=force)
+    except STAGE_ERRORS as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
+    _report_calibration(results)
 
 
 @app.command()
@@ -217,13 +238,17 @@ def report(overrides: Overrides = None) -> None:
 
 @app.command()
 def run(ctx: typer.Context, overrides: Overrides = None, force: Force = False) -> None:
-    """Run the pipeline end to end: download, prepare, score (later phases add their stages)."""
+    """Run the pipeline end to end: download, prepare, score, calibrate (more stages later)."""
     reg, paths, cfg = _setup(ctx, overrides)
     try:
         download_stage.download(reg, paths, download_stage.datasets_for(reg, cfg))
         prepare_stage.prepare(reg, paths, cfg, force=force)
         results = score_stage.score(reg, paths, cfg, force=force)
+        if any(r.status == "failed" for r in results):
+            _report_scores(results)
+        calibrations = calibrate_stage.calibrate(reg, paths, cfg, force=force)
     except STAGE_ERRORS as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=2 if isinstance(e, DownloadError) else 1) from e
     _report_scores(results)
+    _report_calibration(calibrations)

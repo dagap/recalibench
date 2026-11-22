@@ -1,12 +1,11 @@
 """A minimal binned ECE for Phase 4's checks. Phase 7's metrics module supersedes it
 and cross-checks against this one."""
 
-from collections.abc import Sequence
-
 import numpy as np
+import numpy.typing as npt
 
 
-def ece(confidence: Sequence[float], correct: Sequence[float], bins: int = 15) -> float:
+def ece(confidence: npt.ArrayLike, correct: npt.ArrayLike, bins: int = 15) -> float:
     """Equal-width expected calibration error: sum_b |acc_b - conf_b| * n_b / n."""
     conf = np.asarray(confidence, dtype=np.float64)
     hit = np.asarray(correct, dtype=np.float64)
@@ -19,6 +18,6 @@ def ece(confidence: Sequence[float], correct: Sequence[float], bins: int = 15) -
     return total
 
 
-def binary_ece(p_yes: Sequence[float], labels: Sequence[int], bins: int = 15) -> float:
+def binary_ece(p_yes: npt.ArrayLike, labels: npt.ArrayLike, bins: int = 15) -> float:
     """Calibration of P(yes) against the 0/1 label, binned on P(yes)."""
     return ece(p_yes, labels, bins)
